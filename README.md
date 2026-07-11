@@ -1,0 +1,1 @@
+This is an Incident Management System, which may treat as a ticketing system of a Banks ATM Management Department. It can manage all types of Incidents and related needful informations like ATM, CRM, UPS, CCTV, AC etc of an ATM Booth. It can manage all types of tickets related to incidents.
