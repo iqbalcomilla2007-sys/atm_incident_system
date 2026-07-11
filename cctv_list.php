@@ -1,0 +1,895 @@
+<?php
+date_default_timezone_set('Asia/Dhaka');
+
+include 'auth_check.php';
+include 'db.php';
+include 'includes/functions.php';
+
+// এনকোডিং ঠিক করা যাতে ÃƒÆ’... সমস্যা না হয়
+mysqli_set_charset($conn, "utf8");
+
+Auth::requirePermission('cctv_dashboard');
+
+function h($v) { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+function selected($current, $value) { return (string)$current === (string)$value ? 'selected' : ''; }
+function nullIfBlank($value) { $value = trim((string)$value); return $value === '' ? null : $value; }
+
+function buildQueryString($extra = []) {
+    $keep = [];
+    foreach (['search', 'status', 'zone_name'] as $key) {
+        if (isset($_GET[$key])) $keep[$key] = $_GET[$key];
+    }
+    return http_build_query(array_merge($keep, $extra));
+}
+
+function buildReturnQueryFromPost($extra = []) {
+    $keep = [];
+    if (isset($_POST['return_search'])) $keep['search'] = $_POST['return_search'];
+    if (isset($_POST['return_status'])) $keep['status'] = $_POST['return_status'];
+    if (isset($_POST['return_zone_name'])) $keep['zone_name'] = $_POST['return_zone_name'];
+    if (isset($_POST['return_focus_id']) && (int)$_POST['return_focus_id'] > 0) {
+        $keep['focus_id'] = (int)$_POST['return_focus_id'];
+    }
+    if (isset($_POST['return_scroll_y']) && trim((string)$_POST['return_scroll_y']) !== '' && (int)$_POST['return_scroll_y'] >= 0) {
+        $keep['scroll_y'] = (int)$_POST['return_scroll_y'];
+    }
+    return http_build_query(array_merge($keep, $extra));
+}
+
+function buildReturnLocationFromPost($extra = []) {
+    $focusId = isset($extra['focus_id']) ? (int)$extra['focus_id'] : 0;
+    $returnUrl = trim((string)($_POST['return_url'] ?? ''));
+
+    if ($returnUrl !== '') {
+        $parts = parse_url($returnUrl);
+        $path = $parts['path'] ?? '';
+
+        if ($path === '' || basename($path) === 'cctv_list.php') {
+            $query = [];
+            if (!empty($parts['query'])) {
+                parse_str($parts['query'], $query);
+            }
+
+            unset($query['edit_id'], $query['add_new'], $query['delete_id'], $query['network_check_id'], $query['msg']);
+            if (isset($_POST['return_scroll_y']) && trim((string)$_POST['return_scroll_y']) !== '' && (int)$_POST['return_scroll_y'] >= 0) {
+                $query['scroll_y'] = (int)$_POST['return_scroll_y'];
+            }
+            $query = array_merge($query, $extra);
+
+            return 'cctv_list.php' . ($query ? '?' . http_build_query($query) : '') . ($focusId > 0 ? '#cctv-row-' . $focusId : '');
+        }
+    }
+
+    $query = buildReturnQueryFromPost($extra);
+    return 'cctv_list.php' . ($query ? '?' . $query : '') . ($focusId > 0 ? '#cctv-row-' . $focusId : '');
+}
+
+function cleanDvrIp($value) {
+    $value = trim((string)$value);
+    if ($value === '' || $value === '-') return '';
+    if (!preg_match('/^https?:\/\//i', $value)) $value = 'http://' . $value;
+    $parts = parse_url($value);
+    return $parts && !empty($parts['host']) ? $parts['host'] : '';
+}
+
+function dvrLinkOk($ip, $timeout = 3) {
+    $host = cleanDvrIp($ip);
+    if ($host === '') return false;
+    $ports = [80, 8080, 8000, 443];
+    foreach ($ports as $port) {
+        $fp = @fsockopen($host, $port, $errno, $errstr, $timeout);
+        if ($fp) { fclose($fp); return true; }
+    }
+    return false;
+}
+
+function buildCctvListWhere(&$params, &$types) {
+    $search = trim($_GET['search'] ?? '');
+    $status_filter = trim($_GET['status'] ?? '');
+    $zone_filter = trim($_GET['zone_name'] ?? '');
+    $where = [];
+    if ($search !== '') {
+        $where[] = "(atm_id LIKE ? OR atm_name LIKE ? OR zone_name LIKE ? OR branch_name LIKE ? OR dvr_vendor LIKE ? OR ip_address LIKE ? OR m_ip LIKE ? OR remarks LIKE ?)";
+        $lk = "%$search%";
+        for ($i = 0; $i < 8; $i++) { $params[] = $lk; $types .= 's'; }
+    }
+    if ($status_filter !== '') { $where[] = "status = ?"; $params[] = $status_filter; $types .= 's'; }
+    if ($zone_filter !== '') { $where[] = "zone_name = ?"; $params[] = $zone_filter; $types .= 's'; }
+    return $where ? "WHERE " . implode(" AND ", $where) : "";
+}
+
+/* --- FETCH OPTIONS FOR DROPDOWNS & FILTERS --- */
+$vendor_options = [];
+$resV = $conn->query("SELECT vendor_name FROM cctv_vendors WHERE is_active=1 ORDER BY vendor_name ASC");
+while ($resV && $vRow = $resV->fetch_assoc()) { 
+    $vendor_options[] = $vRow['vendor_name']; 
+}
+
+$status_options = [];
+$resStatus = $conn->query("
+    SELECT status, COUNT(*) AS total 
+    FROM cctv_list 
+    GROUP BY status 
+    ORDER BY 
+        CASE WHEN status IS NULL OR status = '' THEN 1 ELSE 0 END,
+        status ASC
+");
+while ($resStatus && $sRow = $resStatus->fetch_assoc()) { 
+    $status_options[] = ['status' => (string)($sRow['status'] ?? ''), 'total' => (int)$sRow['total']]; 
+}
+
+$zone_options = [];
+$resZone = $conn->query("
+    SELECT zone_name, COUNT(*) AS total 
+    FROM cctv_list 
+    WHERE zone_name IS NOT NULL AND zone_name <> '' 
+    GROUP BY zone_name 
+    ORDER BY zone_name ASC
+");
+while ($resZone && $zRow = $resZone->fetch_assoc()) { 
+    $zone_options[] = ['zone_name' => (string)$zRow['zone_name'], 'total' => (int)$zRow['total']]; 
+}
+
+$search = trim($_GET['search'] ?? '');
+$status_filter = trim($_GET['status'] ?? '');
+$zone_filter = trim($_GET['zone_name'] ?? '');
+$isFiltered = (isset($_GET['search']) || isset($_GET['status']) || isset($_GET['zone_name']));
+
+/* =========================================================
+   AJAX HANDLERS (ATM Fetch & Remarks History)
+========================================================= */
+if (isset($_GET['ajax'])) {
+    header('Content-Type: application/json');
+    if ($_GET['ajax'] === 'fetch_atm') {
+        $atm_id = trim($_GET['atm_id'] ?? '');
+        $source = $_GET['source'] ?? 'list';
+        if ($source === 'master') {
+            $stmt = $conn->prepare("SELECT id as atm_master_id, atm_id, atm_name as booth_name, zone_name, branch_name, monitoring_ip, internal_ip, subnet_mask, gateway FROM atm_master WHERE TRIM(atm_id) = ? LIMIT 1");
+        } else {
+            $stmt = $conn->prepare("SELECT atm_id, atm_name as booth_name, zone_name, branch_name, m_ip as monitoring_ip, ip_address as internal_ip, subnet as subnet_mask, gateway FROM cctv_list WHERE TRIM(atm_id) = ? LIMIT 1");
+        }
+        $stmt->bind_param("s", $atm_id); $stmt->execute();
+        $row = $stmt->get_result()->fetch_assoc(); $stmt->close();
+        if ($row) {
+            $atmMasterId = $row['atm_master_id'] ?? '';
+            if ($source !== 'master') {
+                $stmtM = $conn->prepare("SELECT id FROM atm_master WHERE TRIM(atm_id) = ? LIMIT 1");
+                $stmtM->bind_param("s", $atm_id);
+                $stmtM->execute();
+                $rowM = $stmtM->get_result()->fetch_assoc();
+                if ($rowM) $atmMasterId = $rowM['id'];
+                $stmtM->close();
+            }
+            echo json_encode([
+                'success' => true,
+                'atm_master_id' => $atmMasterId,
+                'atm_name' => $row['booth_name'] ?? '',
+                'zone_name' => $row['zone_name'] ?? '',
+                'branch_name' => $row['branch_name'] ?? '',
+                'monitoring_ip' => $row['monitoring_ip'] ?? '',
+                'internal_ip' => $row['internal_ip'] ?? '',
+                'subnet_mask' => $row['subnet_mask'] ?? '',
+                'gateway' => $row['gateway'] ?? ''
+            ]);
+        } else {
+            echo json_encode(['success' => false, 'message' => 'ATM ID not found.']);
+        }
+    }
+    if ($_GET['ajax'] === 'remarks_history') {
+        $cctv_id = (int)($_GET['cctv_id'] ?? 0);
+        $history = [];
+        $stmt = $conn->prepare("SELECT old_remarks, new_remarks, updated_by, created_at FROM cctv_list_remarks_history WHERE cctv_list_id = ? ORDER BY id DESC LIMIT 20");
+        $stmt->bind_param("i", $cctv_id); $stmt->execute();
+        $res = $stmt->get_result();
+        while ($hr = $res->fetch_assoc()) { $history[] = $hr; }
+        $stmt->close();
+        echo json_encode(['success' => true, 'history' => $history]);
+    }
+    exit;
+}
+
+/* =========================================================
+   DELETE & NETWORK CHECK LOGIC
+========================================================= */
+if (isset($_GET['delete_id'])) {
+    $delete_id = (int)$_GET['delete_id'];
+    $stmt = $conn->prepare("DELETE FROM cctv_list WHERE id = ?");
+    $stmt->bind_param("i", $delete_id);
+    if ($stmt->execute()) {
+        header("Location: cctv_list.php?" . buildQueryString([
+            'msg' => 'deleted',
+            'scroll_y' => (int)($_GET['scroll_y'] ?? 0)
+        ]));
+    } else {
+        header("Location: cctv_list.php?msg=error_delete");
+    }
+    $stmt->close();
+    exit;
+}
+
+if (isset($_GET['network_check_id'])) {
+    $network_check_id = (int)$_GET['network_check_id'];
+    if ($network_check_id > 0) {
+        $stmt = $conn->prepare("SELECT m_ip, status FROM cctv_list WHERE id = ? LIMIT 1");
+        $stmt->bind_param("i", $network_check_id);
+        $stmt->execute();
+        $rowNetwork = $stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        if ($rowNetwork) {
+            $dvr_ip = trim($rowNetwork['m_ip'] ?? '');
+            $isOk = dvrLinkOk($dvr_ip);
+
+            if ($isOk) {
+                if (strcasecmp(trim($rowNetwork['status'] ?? ''), 'Offline') === 0) {
+                    $stmt = $conn->prepare("UPDATE cctv_list SET network = 'Ok', status = 'OK' WHERE id = ?");
+                } else {
+                    $stmt = $conn->prepare("UPDATE cctv_list SET network = 'Ok' WHERE id = ?");
+                }
+                $msg = 'network_ok';
+            } else {
+                $stmt = $conn->prepare("UPDATE cctv_list SET network = 'Not Ok', status = 'Offline' WHERE id = ?");
+                $msg = 'network_not_ok';
+            }
+
+            if ($stmt) {
+                $stmt->bind_param("i", $network_check_id);
+                $stmt->execute();
+                $stmt->close();
+            }
+
+            header("Location: cctv_list.php?" . buildQueryString([
+                'msg' => $msg,
+                'focus_id' => $network_check_id,
+                'scroll_y' => (int)($_GET['scroll_y'] ?? 0)
+            ]) . "#cctv-row-" . $network_check_id);
+            exit;
+        }
+    }
+    header("Location: cctv_list.php?msg=network_error");
+    exit;
+}
+
+/* =========================================================
+   OFFLINE FORWARDING LETTER (THE OFFICIAL IBBL FORMAT)
+========================================================= */
+if (isset($_GET['forwarding_id'])) {
+    $forwarding_id = (int)$_GET['forwarding_id'];
+    $stmt = $conn->prepare("SELECT branch_name FROM cctv_list WHERE id = ? LIMIT 1");
+    $stmt->bind_param("i", $forwarding_id);
+    $stmt->execute();
+    $baseRow = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+
+    if (!$baseRow) die("Record not found.");
+    $branchName = trim($baseRow['branch_name'] ?? '');
+    
+    // UPDATED QUERY: Fetch all required problem statuses
+    $stmt = $conn->prepare("SELECT atm_id, atm_name, status FROM cctv_list WHERE branch_name = ? AND status IN ('Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV') ORDER BY atm_name ASC, atm_id ASC");
+    $stmt->bind_param("s", $branchName);
+    $stmt->execute();
+    $offlineRows = $stmt->get_result();
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>CCTV Offline Forwarding</title>
+    <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; font-family: "Times New Roman", serif; color: #000; }
+    .page { width: 210mm; height: 297mm; box-sizing: border-box; padding: 15mm 20mm; display: flex; flex-direction: column; overflow: hidden; }
+    .main-content { flex: 1; font-size: 13.5px; line-height: 1.4; }
+    .letterhead { height: 70px; border-bottom: 2px solid #006837; margin-bottom: 15px; display: flex; justify-content: space-between; }
+    .left-logo img { height: 60px; }
+    .right-logo img { height: 50px; }
+    .meta { display: flex; justify-content: space-between; margin-bottom: 15px; }
+    p { margin: 8px 0; text-align: justify; }
+    .subject { font-weight: bold; text-decoration: underline; margin: 15px 0; }
+    .data-table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+    .data-table th, .data-table td { border: 1px solid #000; padding: 8px; text-align: left; }
+    .data-table th { background: #f2f2f2; font-weight: bold; }
+    .footer-box { text-align: center; font-size: 10.5px; line-height: 1.2; border-top: 1px solid #ccc; padding-top: 10px; margin-top: auto; }
+    @media print { button { display: none; } }
+    </style>
+</head>
+<body onload="window.print()">
+<?php include_once __DIR__ . '/includes/navbar.php'; ?>
+<div class="page">
+    <div class="main-content">
+        <div class="letterhead">
+            <div class="left-logo"><img src="assets/ibbl_mark.png"></div>
+            <div class="right-logo"><img src="assets/ibbl_header_logo.png"></div>
+        </div>
+        <div class="meta">
+            <div>Ref: IBBPLC/HO/DBW/ATMMD/CCTV/<?= date('Y') ?>/_______</div>
+            <div>Date: <?= date('d.m.Y') ?></div>
+        </div>
+        <p>To<br>The Manager / In-charge<br><strong><?= h($branchName ?: 'Concerned Branch') ?> Branch</strong><br>Islami Bank Bangladesh PLC.</p>
+        <p class="subject">Subject: Request for necessary arrangement to bring ATM Booth CCTV systems online.</p>
+        <p>Muhtaram, Assalamu Alaikum,</p>
+        <p>This is to inform you that the CCTV systems of the following ATM Booth(s) under your branch have been found <strong>faulty</strong> during monitoring from ATM Management Division:</p>
+        <table class="data-table">
+            <thead><tr><th width="10%">SL</th><th width="20%">ATM ID</th><th width="45%">ATM Booth Name</th><th width="25%">Status / Issue</th></tr></thead>
+            <tbody>
+                <?php $sl = 1; while ($r = $offlineRows->fetch_assoc()): ?>
+                <tr><td><?= $sl++ ?></td><td><?= h($r['atm_id']) ?></td><td><?= h($r['atm_name']) ?></td><td><?= h($r['status']) ?></td></tr>
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+        <p>ATM Booth CCTV is a critical security control. Continuous availability is essential for secure ATM operations. In view of the above, you are requested to solve the issue as soon as possible. Please keep shut off the ATM/CRM Transactions, if the CCTV system of ATM Booth does not function.</p>
+        <p>Ma-assalam,<br>With Best Regards,<br><br><br>___________________________<br><strong>Md. Mahbub Al Hassan</strong><br>SVP & Head of ATMMD, DBW</p>
+    </div>
+    <div class="footer-box"><strong>ATM Management Division, DBW, HO</strong><br>75, Dilkusha C/A, Dhaka-1000, Bangladesh; email: group_atmmd@islamibankbd.com</div>
+</div>
+</body>
+</html>
+<?php $stmt->close(); exit; }
+
+/* =========================================================
+   SAVE REMARKS & CCTV ADD/UPDATE
+========================================================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    if (isset($_POST['save_remarks'])) {
+        $remarks_id = (int)($_POST['remarks_id'] ?? 0);
+        $new_remarks = trim($_POST['quick_remarks'] ?? '');
+
+        if ($remarks_id > 0) {
+            $stmt = $conn->prepare("SELECT remarks FROM cctv_list WHERE id = ? LIMIT 1");
+            $stmt->bind_param("i", $remarks_id);
+            $stmt->execute();
+            $oldRow = $stmt->get_result()->fetch_assoc();
+            $stmt->close();
+
+            if ($oldRow) {
+                $old_remarks = (string)($oldRow['remarks'] ?? '');
+                $stmt = $conn->prepare("UPDATE cctv_list SET remarks = ? WHERE id = ?");
+                $stmt->bind_param("si", $new_remarks, $remarks_id);
+                $stmt->execute();
+                $stmt->close();
+
+                $updated_by = $_SESSION['username'] ?? 'system';
+                $stmt = $conn->prepare("INSERT INTO cctv_list_remarks_history (cctv_list_id, old_remarks, new_remarks, updated_by) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("isss", $remarks_id, $old_remarks, $new_remarks, $updated_by);
+                $stmt->execute();
+                $stmt->close();
+
+                header("Location: " . buildReturnLocationFromPost(['msg' => 'remarks_updated', 'focus_id' => $remarks_id]));
+                exit;
+            }
+        }
+        exit;
+    }
+
+    if (isset($_POST['add_cctv']) || isset($_POST['update_cctv'])) {
+        $id = (int)($_POST['id'] ?? 0);
+        $atm_id = trim($_POST['atm_id'] ?? '');
+        $zone_name = trim($_POST['zone_name'] ?? '');
+        $br_code = trim($_POST['br_code'] ?? '');
+        $branch_name = trim($_POST['branch_name'] ?? '');
+        $atm_name = trim($_POST['atm_name'] ?? '');
+        $network = trim($_POST['network'] ?? '');
+        $backup = trim($_POST['backup'] ?? '');
+        $dvr_inst_date = nullIfBlank($_POST['dvr_inst_date']);
+        $dvr_vendor = trim($_POST['dvr_vendor'] ?? '');
+        $dvr_brand = trim($_POST['dvr_brand'] ?? '');
+        $dvr_model = trim($_POST['dvr_model'] ?? '');
+        $dvr_serial = trim($_POST['dvr_serial'] ?? '');
+        $dvr_password = trim($_POST['dvr_password'] ?? ''); 
+        $camera = trim($_POST['camera'] ?? '');
+        $camera_inst_date = nullIfBlank($_POST['camera_inst_date']);
+        $camera_vendor = trim($_POST['camera_vendor'] ?? '');
+        $hdd_size_tb = trim($_POST['hdd_size_tb'] ?? '');
+        $hdd_inst_date = nullIfBlank($_POST['hdd_inst_date']);
+        $hdd_serial = trim($_POST['hdd_serial'] ?? '');
+        $hdd_vendor = trim($_POST['hdd_vendor'] ?? '');
+        $m_ip = trim($_POST['m_ip'] ?? '');
+        $ip_address = trim($_POST['ip_address'] ?? '');
+        $subnet = trim($_POST['subnet'] ?? '');
+        $gateway = trim($_POST['gateway'] ?? '');
+        $status = trim($_POST['status'] ?? 'OK');
+        $remarks = trim($_POST['remarks'] ?? '');
+
+        if ($atm_id !== '') {
+            if ($id > 0) {
+                $stmt = $conn->prepare("UPDATE cctv_list SET atm_id=?, zone_name=?, br_code=?, branch_name=?, atm_name=?, network=?, backup=?, dvr_inst_date=?, dvr_vendor=?, dvr_brand=?, dvr_model=?, dvr_serial=?, dvr_password=?, camera=?, camera_inst_date=?, camera_vendor=?, hdd_size_tb=?, hdd_inst_date=?, hdd_serial=?, hdd_vendor=?, m_ip=?, ip_address=?, subnet=?, gateway=?, status=?, remarks=? WHERE id=?");
+                $stmt->bind_param("ssssssssssssssssssssssssssi", $atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks, $id);
+            } else {
+                $stmt = $conn->prepare("INSERT INTO cctv_list (atm_id, zone_name, br_code, branch_name, atm_name, network, backup, dvr_inst_date, dvr_vendor, dvr_brand, dvr_model, dvr_serial, dvr_password, camera, camera_inst_date, camera_vendor, hdd_size_tb, hdd_inst_date, hdd_serial, hdd_vendor, m_ip, ip_address, subnet, gateway, status, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                $stmt->bind_param("ssssssssssssssssssssssssss", $atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks);
+            }
+            if ($stmt->execute()) {
+                header("Location: " . buildReturnLocationFromPost(['msg' => 'saved', 'focus_id' => $id > 0 ? $id : (int)$conn->insert_id]));
+                exit;
+            }
+            $stmt->close();
+        }
+    }
+}
+
+$editData = null;
+if (isset($_GET['edit_id'])) {
+    $stmt = $conn->prepare("SELECT * FROM cctv_list WHERE id = ?");
+    $stmt->bind_param("i", $_GET['edit_id']);
+    $stmt->execute();
+    $editData = $stmt->get_result()->fetch_assoc();
+    $stmt->close();
+}
+$showForm = $editData || isset($_GET['add_new']);
+$focus_id = (int)($_GET['focus_id'] ?? 0);
+$scroll_y = isset($_GET['scroll_y']) ? (int)$_GET['scroll_y'] : null;
+
+$returnExtra = [];
+if ($scroll_y !== null) {
+    $returnExtra['scroll_y'] = $scroll_y;
+}
+$returnQuery = buildQueryString($returnExtra);
+$listReturnUrl = 'cctv_list.php' . ($returnQuery ? '?' . $returnQuery : '');
+
+$list = null;
+if ($isFiltered) {
+    $params = []; $types = ''; $wSql = buildCctvListWhere($params, $types);
+    $sql = "SELECT * FROM cctv_list $wSql ORDER BY zone_name ASC, branch_name ASC, atm_name ASC, atm_id ASC";
+    $stmt = $conn->prepare($sql); 
+    if ($params) $stmt->bind_param($types, ...$params);
+    $stmt->execute(); 
+    $list = $stmt->get_result();
+
+    /* =========================================================
+       EXPORT EXCEL LOGIC 
+    ========================================================= */
+    if (isset($_GET['export']) && $_GET['export'] === 'excel') {
+        header("Content-Type: application/vnd.ms-excel; charset=utf-8");
+        header("Content-Disposition: attachment; filename=CCTV_Inventory_List_" . date('Y-m-d') . ".xls");
+        
+        echo "<table border='1'>";
+        echo "<tr style='background-color:#f2f2f2;'>
+                <th>SL</th>
+                <th>Branch</th>
+                <th>ATM ID</th>
+                <th>Booth Name</th>
+                <th>Zone</th>
+                <th>Status</th>
+                <th>Network</th>
+                <th>Monitoring IP</th>
+                <th>Internal IP</th>
+                <th>DVR Vendor</th>
+                <th>Remarks</th>
+              </tr>";
+        
+        $sl = 1;
+        while($row = $list->fetch_assoc()) {
+            echo "<tr>";
+            echo "<td>" . $sl++ . "</td>";
+            echo "<td>" . h($row['branch_name']) . "</td>";
+            echo "<td>" . h($row['atm_id']) . "</td>";
+            echo "<td>" . h($row['atm_name']) . "</td>";
+            echo "<td>" . h($row['zone_name']) . "</td>";
+            echo "<td>" . h($row['status']) . "</td>";
+            echo "<td>" . h($row['network']) . "</td>";
+            echo "<td>" . h($row['m_ip']) . "</td>";
+            echo "<td>" . h($row['ip_address']) . "</td>";
+            echo "<td>" . h($row['dvr_vendor']) . "</td>";
+            echo "<td>" . h($row['remarks']) . "</td>";
+            echo "</tr>";
+        }
+        echo "</table>";
+        exit;
+    }
+}
+
+/* =========================================================
+   SUMMARY PRINT PAGE
+========================================================= */
+if (isset($_GET['print_summary'])) {
+    $resSummary = $conn->query("SELECT status, COUNT(*) AS total FROM cctv_list GROUP BY status ORDER BY status ASC");
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CCTV Summary</title>
+    <style>
+        body { font-family: sans-serif; padding: 40px; text-align: center; }
+        table { border-collapse: collapse; width: 350px; margin: 20px auto; }
+        th, td { border: 1px solid #333; padding: 12px; text-align: left; }
+        th { background: #f0f0f0; }
+    </style>
+</head>
+<body onload="window.print()">
+    <h2>Islami Bank Bangladesh PLC</h2>
+    <h3>CCTV Status Summary</h3>
+    <hr>
+    <table>
+        <thead><tr><th>Status</th><th>Count</th></tr></thead>
+        <tbody>
+            <?php $total=0; while($r=$resSummary->fetch_assoc()): $total+=$r['total']; ?>
+            <tr><td><?= h($r['status']?:'Blank') ?></td><td><?= (int)$r['total'] ?></td></tr>
+            <?php endwhile; ?>
+            <tr style="font-weight:bold"><td>Total</td><td><?= (int)$total ?></td></tr>
+        </tbody>
+    </table>
+</body>
+</html>
+<?php exit; } ?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>CCTV List Management</title>
+    <style>
+        :root { --primary: #2563eb; --success: #059669; --danger: #dc2626; --secondary: #64748b; --dark: #0f172a; --info: #06b6d4; }
+        body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; margin: 20px; font-size: 13.5px; color: #334155; }
+        .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border: 1px solid #e2e8f0; }
+        
+        /* Modern Smart Buttons */
+        .btn { display: inline-flex; align-items: center; justify-content: center; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; color: #fff; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); gap: 6px; margin: 2px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04); }
+        .btn:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.06), 0 10px 20px rgba(0, 0, 0, 0.08); filter: brightness(1.05); }
+        .btn:active { transform: translateY(0) scale(0.98); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); }
+        .btn-blue { background: linear-gradient(135deg, #2563eb, #3b82f6); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15); } 
+        .btn-success { background: linear-gradient(135deg, #059669, #10b981); box-shadow: 0 4px 12px rgba(5, 150, 105, 0.15); } 
+        .btn-danger { background: linear-gradient(135deg, #e11d48, #f43f5e); box-shadow: 0 4px 12px rgba(225, 29, 72, 0.15); } 
+        .btn-secondary { background: linear-gradient(135deg, #64748b, #475569); box-shadow: 0 4px 12px rgba(71, 85, 105, 0.1); } 
+        .btn-dark { background: linear-gradient(135deg, #1e293b, #0f172a); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); } 
+        .btn-info { background: linear-gradient(135deg, #0d9488, #14b8a6); box-shadow: 0 4px 12px rgba(13, 148, 136, 0.15); }
+        .btn-sm { padding: 6px 12px; font-size: 11.5px; border-radius: 6px; }
+        
+        .form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 15px; }
+        .label { display: block; font-weight: 600; margin-bottom: 5px; color: #475569; font-size: 12px; }
+        input, select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 8px; box-sizing: border-box; outline: none; }
+        input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+        
+        table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+        th, td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+        th { background: #f8fafc; font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 11px; position: sticky; top: 0; z-index: 1; }
+        tr:hover td { background: #f9fbff; }
+        .focus-row { background: #fffbeb !important; outline: 2px solid #fcd34d; }
+        .status-badge { padding: 4px 8px; border-radius: 6px; font-size: 11px; font-weight: 700; display: inline-block; }
+        
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); overflow-y: auto; }
+        .modal-content { background: #fff; margin: 40px auto; padding: 25px; border-radius: 15px; width: 85%; max-width: 800px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
+
+        /* Print/PDF specific CSS */
+        @media print {
+            body { background: #fff; margin: 0; padding: 0; }
+            .no-print, nav, .card:not(.print-container), form, #detailsModal { display: none !important; }
+            .card.print-container { border: none !important; box-shadow: none !important; margin: 0 !important; padding: 0 !important; }
+            table { width: 100% !important; border-collapse: collapse !important; margin-top: 20px; }
+            th, td { border: 1px solid #000 !important; padding: 6px !important; font-size: 10pt !important; color: #000 !important; }
+            th { background: #f0f0f0 !important; color: #000 !important; position: static !important; }
+            .action-col { display: none !important; }
+            .status-badge { color: #000 !important; background: transparent !important; font-weight: normal; padding: 0; }
+            .print-header { display: block !important; text-align: center; margin-bottom: 20px; }
+        }
+    </style>
+</head>
+<body>
+<?php include_once __DIR__ . '/includes/navbar.php'; ?>
+
+<div class="card no-print">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+        <h2 style="margin:0; font-weight: 700; color: var(--dark);">CCTV Inventory & Monitoring</h2>
+        <div style="display:flex; gap:6px; flex-wrap:wrap;">
+            <a href="cctv_list.php?add_new=1&<?=buildQueryString()?>" class="btn btn-success">+ Add New CCTV</a>
+            
+            <?php if($isFiltered): ?>
+                <a href="cctv_list.php?export=excel&<?=buildQueryString()?>" class="btn btn-info">Export Excel</a>
+                <button type="button" onclick="window.print()" class="btn btn-secondary">Print / PDF</button>
+            <?php endif; ?>
+
+            <a href="cctv_list.php?print_summary=1" target="_blank" class="btn btn-dark">Print Summary</a>
+            <a href="cctv_dashboard.php" class="btn btn-blue">Dashboard</a>
+            <a href="dashboard_ajax_v2.php" class="btn btn-secondary">Main System</a>
+        </div>
+    </div>
+</div>
+
+<?php if ($showForm): ?>
+<div class="card no-print">
+    <h3 style="margin-top:0; color: var(--dark); font-weight:700;"><?= $editData ? 'Edit Device Record' : 'Register New Device' ?></h3>
+    <form method="POST">
+        <input type="hidden" name="id" value="<?= h($editData['id'] ?? 0) ?>">
+        <input type="hidden" name="return_url" value="<?= h($_SERVER['REQUEST_URI'] ?? 'cctv_list.php') ?>">
+        <input type="hidden" name="return_scroll_y" value="<?= h($_GET['scroll_y'] ?? '') ?>">
+        <input type="hidden" name="return_focus_id" value="<?= h($editData['id'] ?? 0) ?>">
+        <input type="hidden" name="return_search" value="<?= h($search) ?>">
+        <input type="hidden" name="return_status" value="<?= h($status_filter) ?>">
+        <input type="hidden" name="return_zone_name" value="<?= h($zone_filter) ?>">
+
+        <h4 style="margin: 15px 0 10px; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; font-weight: 600;">ATM & Location Info</h4>
+        <div class="form-grid">
+            <div>
+                <label class="label">ATM ID</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" name="atm_id" id="f_atm_id" value="<?= h($editData['atm_id'] ?? '') ?>" required style="flex: 1;">
+                    <button type="button" id="btn_fetch_atm" class="btn btn-blue" style="padding: 0 15px; margin: 0; white-space: nowrap;">Fetch</button>
+                </div>
+            </div>
+            <div><label class="label">Booth Name</label><input type="text" name="atm_name" id="f_atm_name" value="<?= h($editData['atm_name'] ?? '') ?>"></div>
+            <div><label class="label">Zone</label><input type="text" name="zone_name" id="f_zone_name" value="<?= h($editData['zone_name'] ?? '') ?>"></div>
+            <div><label class="label">Branch Name</label><input type="text" name="branch_name" id="f_branch_name" value="<?= h($editData['branch_name'] ?? '') ?>"></div>
+            <div><label class="label">Branch Code</label><input type="text" name="br_code" value="<?= h($editData['br_code'] ?? '') ?>"></div>
+        </div>
+
+        <h4 style="margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; font-weight: 600;">Network Configuration</h4>
+        <div class="form-grid">
+            <div><label class="label">Monitoring IP</label><input type="text" name="m_ip" id="f_m_ip" value="<?= h($editData['m_ip'] ?? '') ?>"></div>
+            <div><label class="label">Internal IP</label><input type="text" name="ip_address" id="f_ip_address" value="<?= h($editData['ip_address'] ?? '') ?>"></div>
+            <div><label class="label">Subnet Mask</label><input type="text" name="subnet" id="f_subnet" value="<?= h($editData['subnet'] ?? '') ?>"></div>
+            <div><label class="label">Gateway</label><input type="text" name="gateway" id="f_gateway" value="<?= h($editData['gateway'] ?? '') ?>"></div>
+            <div><label class="label">Network Status</label>
+                <select name="network">
+                    <option value="">Select</option>
+                    <option value="Ok" <?=selected($editData['network']??'','Ok')?>>Ok</option>
+                    <option value="Not Ok" <?=selected($editData['network']??'','Not Ok')?>>Not Ok</option>
+                </select>
+            </div>
+        </div>
+
+        <h4 style="margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; font-weight: 600;">Hardware Details (DVR, Camera, HDD)</h4>
+        <div class="form-grid">
+            <div><label class="label">DVR Vendor</label>
+                <select name="dvr_vendor">
+                    <option value="">--Select--</option>
+                    <?php 
+                    foreach($vendor_options as $vo) {
+                        echo "<option value='$vo' ".selected($editData['dvr_vendor']??'',$vo).">$vo</option>";
+                    }
+                    $val = $editData['dvr_vendor'] ?? '';
+                    if ($val !== '' && !in_array($val, $vendor_options)) {
+                        echo "<option value='$val' selected>$val</option>";
+                    }
+                    ?>
+                </select>
+            </div>
+            <div><label class="label">DVR Brand</label><input type="text" name="dvr_brand" value="<?= h($editData['dvr_brand'] ?? '') ?>"></div>
+            <div><label class="label">DVR Model</label><input type="text" name="dvr_model" value="<?= h($editData['dvr_model'] ?? '') ?>"></div>
+            <div><label class="label">DVR Serial</label><input type="text" name="dvr_serial" value="<?= h($editData['dvr_serial'] ?? '') ?>"></div>
+            
+            <div><label class="label">DVR Password</label><input type="text" name="dvr_password" value="<?= h($editData['dvr_password'] ?? '') ?>" placeholder="Enter DVR Password"></div>
+            
+            <div><label class="label">DVR Install Date</label><input type="date" name="dvr_inst_date" value="<?= h($editData['dvr_inst_date'] ?? '') ?>"></div>
+
+            <div><label class="label">Camera Channels</label><input type="text" name="camera" value="<?= h($editData['camera'] ?? '') ?>"></div>
+            <div><label class="label">Camera Vendor</label>
+                <select name="camera_vendor">
+                    <option value="">--Select--</option>
+                    <?php 
+                    foreach($vendor_options as $vo) {
+                        echo "<option value='$vo' ".selected($editData['camera_vendor']??'',$vo).">$vo</option>";
+                    }
+                    $val = $editData['camera_vendor'] ?? '';
+                    if ($val !== '' && !in_array($val, $vendor_options)) {
+                        echo "<option value='$val' selected>$val</option>";
+                    }
+                    ?>
+                </select>
+            </div>
+            <div><label class="label">Camera Install Date</label><input type="date" name="camera_inst_date" value="<?= h($editData['camera_inst_date'] ?? '') ?>"></div>
+
+            <div><label class="label">HDD Size (TB)</label><input type="text" name="hdd_size_tb" value="<?= h($editData['hdd_size_tb'] ?? '') ?>"></div>
+            <div><label class="label">HDD Serial</label><input type="text" name="hdd_serial" value="<?= h($editData['hdd_serial'] ?? '') ?>"></div>
+            <div><label class="label">HDD Vendor</label>
+                <select name="hdd_vendor">
+                    <option value="">--Select--</option>
+                    <?php 
+                    foreach($vendor_options as $vo) {
+                        echo "<option value='$vo' ".selected($editData['hdd_vendor']??'',$vo).">$vo</option>";
+                    }
+                    $val = $editData['hdd_vendor'] ?? '';
+                    if ($val !== '' && !in_array($val, $vendor_options)) {
+                        echo "<option value='$val' selected>$val</option>";
+                    }
+                    ?>
+                </select>
+            </div>
+            <div><label class="label">HDD Install Date</label><input type="date" name="hdd_inst_date" value="<?= h($editData['hdd_inst_date'] ?? '') ?>"></div>
+        </div>
+
+        <h4 style="margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; font-weight: 600;">Status & Remarks</h4>
+        <div class="form-grid">
+            <div><label class="label">Status</label>
+                <select name="status">
+                    <?php foreach($status_options as $so): ?>
+                        <option value="<?= h($so['status']) ?>" <?= selected($editData['status']??'OK', $so['status']) ?>><?= h($so['status']?:'Blank') ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div><label class="label">Backup Status</label><input type="text" name="backup" value="<?= h($editData['backup'] ?? '') ?>" placeholder="e.g. 30 Days"></div>
+            <div style="grid-column: 1 / -1;"><label class="label">Internal Remarks</label><textarea name="remarks" rows="2"><?= h($editData['remarks'] ?? '') ?></textarea></div>
+        </div>
+
+        <div style="margin-top:20px; text-align:right;">
+            <button type="submit" name="<?= $editData ? 'update_cctv' : 'add_cctv' ?>" class="btn btn-blue">Save Changes</button>
+            <a href="<?= h($listReturnUrl) ?>" class="btn btn-secondary">Discard</a>
+        </div>
+    </form>
+</div>
+<?php endif; ?>
+
+<div class="card no-print">
+    <form method="GET">
+        <div class="form-grid" style="align-items: flex-end;">
+            <div><label class="label">Quick Search</label><input type="text" name="search" value="<?= h($search) ?>" placeholder="ATM ID, booth, IP..."></div>
+            <div><label class="label">Zone</label>
+                <select name="zone_name">
+                    <option value="">All Zones</option>
+                    <?php foreach($zone_options as $opt): ?>
+                        <option value="<?= h($opt['zone_name']) ?>" <?= selected($zone_filter, $opt['zone_name']) ?>><?= h($opt['zone_name']) ?> (<?= (int)$opt['total'] ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div><label class="label">Status Filter</label>
+                <select name="status">
+                    <option value="">All Statuses</option>
+                    <?php foreach($status_options as $opt): ?>
+                        <option value="<?= h($opt['status']) ?>" <?= selected($status_filter, $opt['status']) ?>><?= h($opt['status']?:'Blank') ?> (<?= (int)$opt['total'] ?>)</option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+            <div style="display: flex; gap: 8px;">
+                <button type="submit" class="btn btn-dark" style="flex: 1;">Filter List</button>
+                <a href="cctv_list.php" class="btn btn-secondary">Reset</a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<?php if ($isFiltered): ?>
+    <div class="card print-container" style="padding:0; overflow:hidden;">
+        
+        <div class="print-header" style="display:none;">
+            <h2>Islami Bank Bangladesh PLC</h2>
+            <h3>CCTV Inventory List</h3>
+            <p>Date: <?= date('d-M-Y') ?> | Filter: <?= h($search ? "Search='$search' " : '') . h($status_filter ? "Status='$status_filter' " : '') . h($zone_filter ? "Zone='$zone_filter'" : '') ?></p>
+        </div>
+
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SL</th>
+                        <th>Branch</th>
+                        <th>ATM ID</th>
+                        <th>Booth Name</th>
+                        <th>Status</th>
+                        <th>Network</th>
+                        <th>Monitoring IP</th>
+                        <th class="action-col">Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php 
+                    if ($list && $list->num_rows > 0): 
+                        // Result set pointer is re-fetched due to Excel Export but we did exit on excel so pointer is fresh
+                        $list->data_seek(0);
+                        $sl = 1; 
+                        while($row = $list->fetch_assoc()): 
+                            $dvr_ip = trim($row['m_ip'] ?? '');
+                            $dvrUrl = ($dvr_ip !== '' && $dvr_ip !== '-') ? "http://$dvr_ip" : "";
+                            
+                            $statusStr = trim($row['status'] ?? '');
+                            $isOffline = strcasecmp($statusStr, 'Offline') === 0;
+                            $isForwardable = in_array($statusStr, ['Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV']);
+                    ?>
+                    <tr id="cctv-row-<?= (int)$row['id'] ?>" class="<?= ($focus_id === (int)$row['id']) ? 'focus-row' : '' ?>">
+                        <td><?= $sl++ ?></td>
+                        <td><?= h($row['branch_name']) ?></td>
+                        <td style="font-weight:bold; color:var(--primary);"><?= h($row['atm_id']) ?></td>
+                        <td><?= h($row['atm_name']) ?></td>
+                        <td><span class="status-badge" style="background:<?= $isOffline?'#fee2e2;color:#b91c1c':'#dcfce7;color:#166534' ?>"><?= h($row['status']?:'Blank') ?></span></td>
+                        <td><?= h($row['network']) ?></td>
+                        <td><?= h($row['m_ip']) ?></td>
+                        <td class="action-col" style="white-space:nowrap;">
+                            <a href="cctv_list.php?network_check_id=<?= (int)$row['id'] ?>&<?= buildQueryString() ?>" class="btn btn-sm btn-secondary js-preserve-scroll">Check</a>
+                            
+                            <?php if ($dvrUrl !== ''): ?>
+                                <a href="<?= h($dvrUrl) ?>" target="_blank" class="btn btn-sm btn-success">Open DVR</a>
+                            <?php endif; ?>
+
+                            <?php if ($isForwardable): ?>
+                                <a href="cctv_list.php?forwarding_id=<?= (int)$row['id'] ?>" target="_blank" class="btn btn-sm btn-dark">Forwarding</a>
+                            <?php endif; ?>
+
+                            <button type="button" class="btn btn-sm btn-info" onclick="showDetails(<?= h(json_encode($row)) ?>)">Details</button>
+                            <a href="cctv_list.php?edit_id=<?= (int)$row['id'] ?>&<?= buildQueryString() ?>" class="btn btn-sm btn-blue js-preserve-scroll">Edit</a>
+                            <a href="cctv_list.php?delete_id=<?= (int)$row['id'] ?>&<?= buildQueryString() ?>" class="btn btn-sm btn-danger js-preserve-scroll" onclick="return confirm('Delete record?')">Del</a>
+                        </td>
+                    </tr>
+                    <?php 
+                        endwhile; 
+                    else: 
+                    ?>
+                    <tr><td colspan="8" style="text-align: center; color: var(--secondary); padding: 30px;">No devices found matching your filters.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+<?php else: ?>
+    <div class="card no-print" style="text-align: center; padding: 50px 20px; color: var(--secondary);">
+        <div style="font-size: 48px; margin-bottom: 15px; color: #cbd5e1;">🔍</div>
+        <h3 style="margin: 0 0 10px; color: var(--dark); font-weight:700;">Search and Filter CCTV Records</h3>
+        <p style="margin: 0; max-width: 500px; margin-left: auto; margin-right: auto; line-height: 1.5;">
+            To optimize performance, please use the search box or select a zone/status above to load the CCTV device list.
+        </p>
+    </div>
+<?php endif; ?>
+
+<div id="detailsModal" class="modal">
+    <div class="modal-content">
+        <div style="display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding-bottom:10px; margin-bottom:15px;">
+            <h3 id="modalTitle" style="margin:0; font-weight:700; color: var(--dark);"></h3>
+            <button class="btn btn-sm btn-secondary" onclick="document.getElementById('detailsModal').style.display='none'">Close</button>
+        </div>
+        <div id="modalBody" style="display:grid; grid-template-columns:1fr 1fr; gap:12px; font-size: 13px;"></div>
+    </div>
+</div>
+
+<script>
+function showDetails(data) {
+    document.getElementById('modalTitle').innerText = "Device Profile: " + data.atm_id;
+    let html = "";
+    for(let k in data) { 
+        html += `<div style="font-weight: 600; color: var(--secondary);">${k.replace(/_/g, ' ').toUpperCase()}:</div><div>${data[k] || '-'}</div>`; 
+    }
+    document.getElementById('modalBody').innerHTML = html;
+    document.getElementById('detailsModal').style.display = 'block';
+}
+
+const savedScrollY = <?= $scroll_y === null ? 'null' : (int)$scroll_y ?>;
+const isEditMode = <?= isset($_GET['edit_id']) ? 'true' : 'false' ?>;
+if (isEditMode) {
+    window.addEventListener('load', () => setTimeout(() => window.scrollTo({ top: 0, behavior: 'auto' }), 0));
+} else if (savedScrollY !== null) {
+    window.addEventListener('load', () => setTimeout(() => window.scrollTo(0, savedScrollY), 0));
+}
+
+document.querySelectorAll('a.js-preserve-scroll').forEach(link => {
+    link.addEventListener('click', () => {
+        const url = new URL(link.href, window.location.href);
+        url.searchParams.set('scroll_y', String(window.scrollY));
+        link.href = url.toString();
+    });
+});
+
+const btnFetchAtm = document.getElementById('btn_fetch_atm');
+const atmIdField = document.getElementById('f_atm_id');
+if (btnFetchAtm && atmIdField) {
+    btnFetchAtm.addEventListener('click', function() {
+        const val = atmIdField.value.trim();
+        if (!val) {
+            alert('Please enter an ATM ID first.');
+            return;
+        }
+        const originalText = btnFetchAtm.innerText;
+        btnFetchAtm.innerText = 'Loading...';
+        btnFetchAtm.disabled = true;
+        
+        fetch('cctv_list.php?ajax=fetch_atm&source=master&atm_id=' + encodeURIComponent(val))
+            .then(r => r.json())
+            .then(data => {
+                btnFetchAtm.innerText = originalText;
+                btnFetchAtm.disabled = false;
+                if (data.success) {
+                    document.getElementById('f_atm_name').value = data.atm_name || '';
+                    document.getElementById('f_zone_name').value = data.zone_name || '';
+                    document.getElementById('f_branch_name').value = data.branch_name || '';
+                    document.getElementById('f_m_ip').value = data.monitoring_ip || '';
+                    document.getElementById('f_ip_address').value = data.internal_ip || '';
+                    document.getElementById('f_subnet').value = data.subnet_mask || '';
+                    document.getElementById('f_gateway').value = data.gateway || '';
+                } else {
+                    alert(data.message || 'ATM ID not found in master records.');
+                }
+            })
+            .catch(err => {
+                btnFetchAtm.innerText = originalText;
+                btnFetchAtm.disabled = false;
+                alert('An error occurred while fetching ATM data.');
+            });
+    });
+}
+</script>
+</body>
+</html>

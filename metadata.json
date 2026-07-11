@@ -1,0 +1,6 @@
+{
+  "name": "ATM Incident Management System",
+  "description": "A robust system for managing ATM assets and tracking real-time incidents with automatic data synchronization.",
+  "requestFramePermissions": [],
+  "majorCapabilities": []
+}

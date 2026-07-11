@@ -1,0 +1,379 @@
+<?php
+date_default_timezone_set('Asia/Dhaka');
+
+include 'auth_check.php';
+include 'db.php';
+include 'includes/functions.php';
+
+if (!function_exists('h')) {
+    function h($v) {
+        return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+Auth::requirePermission('manage_atm_master');
+
+$msg = '';
+$error = '';
+
+$search = trim($_GET['search'] ?? '');
+$editId = isset($_GET['edit']) ? (int)$_GET['edit'] : 0;
+$searchQueryStr = $search !== '' ? '&search=' . urlencode($search) : '';
+
+if (isset($_GET['msg'])) {
+    if ($_GET['msg'] === 'updated') $msg = "Branch updated successfully.";
+    if ($_GET['msg'] === 'added') $msg = "Branch added successfully.";
+    if ($_GET['msg'] === 'deleted') $msg = "Branch deleted successfully.";
+}
+
+/* =========================
+   ADD / UPDATE
+========================= */
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+
+    $id = (int)($_POST['id'] ?? 0);
+    $search_param = trim($_POST['search_param'] ?? '');
+    $zone_name = trim($_POST['zone_name'] ?? '');
+    $branch_name = trim($_POST['branch_name'] ?? '');
+    $branch_code = trim($_POST['branch_code'] ?? '');
+    $status = (int)($_POST['status'] ?? 1);
+
+    if ($zone_name === '' || $branch_name === '') {
+        $error = "Zone Name and Branch Name are required.";
+    } else {
+        
+        // --- Duplicate Branch Code & Name Check ---
+        $isDuplicateCode = false;
+        $isDuplicateName = false;
+
+        // Check Branch Code
+        if ($branch_code !== '') {
+            $chkCode = $conn->prepare("SELECT id FROM zone_branch_map WHERE branch_code = ? AND id != ?");
+            $chkCode->bind_param("si", $branch_code, $id);
+            $chkCode->execute();
+            if ($chkCode->get_result()->num_rows > 0) {
+                $isDuplicateCode = true;
+            }
+            $chkCode->close();
+        }
+
+        // Check Branch Name & Zone
+        $chkName = $conn->prepare("SELECT id FROM zone_branch_map WHERE zone_name = ? AND branch_name = ? AND id != ?");
+        $chkName->bind_param("ssi", $zone_name, $branch_name, $id);
+        $chkName->execute();
+        if ($chkName->get_result()->num_rows > 0) {
+            $isDuplicateName = true;
+        }
+        $chkName->close();
+
+
+        if ($isDuplicateCode) {
+            $error = "Error: Branch Code '$branch_code' already exists.";
+        } elseif ($isDuplicateName) {
+            $error = "Error: Branch '$branch_name' already exists in Zone '$zone_name'.";
+        } else {
+            // Proceed with Insert / Update
+            $s_url = $search_param !== '' ? '&search=' . urlencode($search_param) : '';
+
+            // ========================================================
+            // Synchronize with zone_master
+            // Ensure the new zone exists in zone_master table
+            // ========================================================
+            $checkZone = $conn->prepare("SELECT id FROM zone_master WHERE zone_name = ?");
+            if ($checkZone) {
+                $checkZone->bind_param("s", $zone_name);
+                $checkZone->execute();
+                $checkZone->store_result();
+                
+                // If zone doesn't exist, insert it automatically (Removed 'status' column)
+                if ($checkZone->num_rows == 0) {
+                    $checkZone->close();
+                    $insZone = $conn->prepare("INSERT INTO zone_master (zone_name) VALUES (?)");
+                    if ($insZone) {
+                        $insZone->bind_param("s", $zone_name);
+                        $insZone->execute();
+                        $insZone->close();
+                    }
+                } else {
+                    $checkZone->close();
+                }
+            }
+
+            if ($id > 0) {
+                // Fetch old values to update related tables
+                $oldZone = '';
+                $oldBranch = '';
+                $oldRes = $conn->query("SELECT zone_name, branch_name FROM zone_branch_map WHERE id = $id");
+                if ($oldRes && $row = $oldRes->fetch_assoc()) {
+                    $oldZone = $row['zone_name'];
+                    $oldBranch = $row['branch_name'];
+                }
+
+                // UPDATE
+                $stmt = $conn->prepare("
+                    UPDATE zone_branch_map
+                    SET zone_name=?, branch_name=?, branch_code=?, status=?
+                    WHERE id=?
+                ");
+                $stmt->bind_param("sssii", $zone_name, $branch_name, $branch_code, $status, $id);
+                $stmt->execute();
+                $stmt->close();
+
+                // Synchronize with atm_master
+                $stmtAtm = $conn->prepare("
+                    UPDATE atm_master
+                    SET branch_code = ?, zone_name = ?, branch_name = ?
+                    WHERE zone_name = ? AND branch_name = ?
+                ");
+                if ($stmtAtm) {
+                    $stmtAtm->bind_param("sssss", $branch_code, $zone_name, $branch_name, $oldZone, $oldBranch);
+                    $stmtAtm->execute();
+                    $stmtAtm->close();
+                }
+
+                // Synchronize with atm_contact (using soft match)
+                $atmObj = new AtmMaster();
+                $contactKey = $atmObj->branchKeySql('branch_name');
+                $cleanParam = $atmObj->branchKeySql('?');
+                $stmtContact = $conn->prepare("
+                    UPDATE atm_contact
+                    SET branch_code = ?, branch_name = ?
+                    WHERE $contactKey = $cleanParam
+                ");
+                if ($stmtContact) {
+                    $stmtContact->bind_param("sss", $branch_code, $branch_name, $oldBranch);
+                    $stmtContact->execute();
+                    $stmtContact->close();
+                }
+
+                AuditLog::log("UPDATE_ZONE_BRANCH_MAP", "Updated branch mapping: " . $branch_name . " (Code: " . $branch_code . ") under Zone: " . $zone_name);
+                
+                // Redirect back to specific row
+                header("Location: manage_zone_branch_map.php?msg=updated{$s_url}#row-{$id}");
+                exit;
+
+            } else {
+                // INSERT
+                $stmt = $conn->prepare("INSERT INTO zone_branch_map (zone_name, branch_name, branch_code, status) VALUES (?, ?, ?, ?)");
+                $stmt->bind_param("sssi", $zone_name, $branch_name, $branch_code, $status);
+                
+                if ($stmt->execute()) {
+                    $newId = $conn->insert_id;
+                    $stmt->close();
+
+                    // Synchronize with atm_master
+                    $stmtAtm = $conn->prepare("
+                        UPDATE atm_master
+                        SET branch_code = ?
+                        WHERE zone_name = ? AND branch_name = ?
+                    ");
+                    if ($stmtAtm) {
+                        $stmtAtm->bind_param("sss", $branch_code, $zone_name, $branch_name);
+                        $stmtAtm->execute();
+                        $stmtAtm->close();
+                    }
+
+                    // Synchronize with atm_contact
+                    $atmObj = new AtmMaster();
+                    $contactKey = $atmObj->branchKeySql('branch_name');
+                    $cleanParam = $atmObj->branchKeySql('?');
+                    $stmtContact = $conn->prepare("
+                        UPDATE atm_contact
+                        SET branch_code = ?
+                        WHERE $contactKey = $cleanParam
+                    ");
+                    if ($stmtContact) {
+                        $stmtContact->bind_param("ss", $branch_code, $branch_name);
+                        $stmtContact->execute();
+                        $stmtContact->close();
+                    }
+
+                    AuditLog::log("CREATE_ZONE_BRANCH_MAP", "Added branch mapping: " . $branch_name . " (Code: " . $branch_code . ") under Zone: " . $zone_name);
+                    
+                    // Redirect to new row
+                    header("Location: manage_zone_branch_map.php?msg=added{$s_url}#row-{$newId}");
+                    exit;
+                }
+            }
+        }
+    }
+}
+
+/* =========================
+   DELETE
+========================= */
+if (isset($_GET['delete'])) {
+    $id = (int)$_GET['delete'];
+
+    $stmt = $conn->prepare("DELETE FROM zone_branch_map WHERE id=?");
+    $stmt->bind_param("i", $id);
+    $stmt->execute();
+    $stmt->close();
+
+    AuditLog::log("DELETE_ZONE_BRANCH_MAP", "Deleted branch mapping record ID: " . $id);
+    header("Location: manage_zone_branch_map.php?msg=deleted{$searchQueryStr}");
+    exit;
+}
+
+/* =========================
+   EDIT LOAD
+========================= */
+$editData = null;
+if ($editId > 0) {
+    $res = $conn->query("SELECT * FROM zone_branch_map WHERE id=$editId LIMIT 1");
+    $editData = $res ? $res->fetch_assoc() : null;
+}
+
+/* =========================
+   LIST WITH SEARCH
+========================= */
+$sql = "SELECT * FROM zone_branch_map";
+if ($search !== '') {
+    $s = $conn->real_escape_string("%$search%");
+    $sql .= " WHERE zone_name LIKE '$s' OR branch_name LIKE '$s' OR branch_code LIKE '$s'";
+}
+$sql .= " ORDER BY zone_name ASC, branch_name ASC";
+$list = $conn->query($sql);
+?>
+
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Zone Branch Mapping</title>
+<style>
+html { scroll-behavior: smooth; } /* Smooth scroll */
+body { font-family: Arial; background:#f5f5f5; margin:20px; }
+.card { background:#fff; padding:15px; margin-bottom:15px; border-radius:6px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+input, select { padding:8px; width:100%; box-sizing: border-box; border:1px solid #ccc; border-radius:4px; }
+.btn { padding:8px 15px; text-decoration:none; border-radius:4px; border:none; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; }
+.btn-save { background:#28a745; color:#fff; }
+.btn-edit { background:#ffc107; color:#000; }
+.btn-del { background:#dc3545; color:#fff; }
+.btn-print { background:#17a2b8; color:#fff; font-weight:bold; }
+.alert { padding:10px; margin-bottom:10px; border-radius:4px; font-weight:bold; }
+.success { background:#d4edda; color:#155724; border:1px solid #c3e6cb; }
+.error { background:#f8d7da; color:#721c24; border:1px solid #f5c6cb; }
+table { width:100%; border-collapse:collapse; }
+th, td { border:1px solid #ddd; padding:8px; text-align:left; }
+th { background:#333; color:#fff; }
+
+/* Custom styles for Search & Print Controls */
+.top-controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; }
+.search-form { display: flex; gap: 10px; flex-grow: 1; max-width: 400px; }
+.search-form input { flex-grow: 1; }
+
+/* Target Row Highlight Animation */
+tr:target {
+    animation: highlight-row 2s ease-out;
+}
+@keyframes highlight-row {
+    0% { background-color: #fce4ec; }
+    100% { background-color: transparent; }
+}
+
+/* Print CSS */
+@media print {
+    body { background: #fff; margin: 0; }
+    .no-print, nav { display: none !important; }
+    .card { border: none; padding: 0; margin-bottom: 20px; box-shadow: none; }
+    th { background: #eee !important; color: #000 !important; }
+    th, td { border: 1px solid #000 !important; }
+}
+</style>
+</head>
+<body>
+<?php include_once __DIR__ . '/includes/navbar.php'; ?>
+
+<div class="card no-print">
+    <div class="top-controls" style="margin-bottom:0;">
+        <h3 style="margin:0;">Zone Branch Mapping</h3>
+        <a href="manage_atm_master.php" class="btn" style="background:#6c757d; color:#fff;">Back to Master</a>
+    </div>
+</div>
+
+<?php if ($msg): ?>
+<div class="alert success no-print"><?= h($msg) ?></div>
+<?php endif; ?>
+
+<?php if ($error): ?>
+<div class="alert error no-print"><?= h($error) ?></div>
+<?php endif; ?>
+
+<div id="form-section" class="card no-print" style="border-top: 4px solid #28a745;">
+<form method="post">
+<input type="hidden" name="id" value="<?= h($editData['id'] ?? '') ?>">
+<input type="hidden" name="search_param" value="<?= h($search) ?>">
+
+<table style="max-width: 600px; border:none;">
+<tr style="border:none;"><td style="border:none; width: 30%;">Zone Name <span style="color:red;">*</span></td><td style="border:none;"><input type="text" name="zone_name" required value="<?= h($editData['zone_name'] ?? '') ?>"></td></tr>
+<tr style="border:none;"><td style="border:none;">Branch Name <span style="color:red;">*</span></td><td style="border:none;"><input type="text" name="branch_name" required value="<?= h($editData['branch_name'] ?? '') ?>"></td></tr>
+<tr style="border:none;"><td style="border:none;">Branch Code</td><td style="border:none;"><input type="text" name="branch_code" value="<?= h($editData['branch_code'] ?? '') ?>"></td></tr>
+<tr style="border:none;"><td style="border:none;">Status</td><td style="border:none;">
+<select name="status">
+    <option value="1" <?= (($editData['status'] ?? 1) == 1) ? 'selected' : '' ?>>Active</option>
+    <option value="0" <?= (($editData['status'] ?? 1) == 0) ? 'selected' : '' ?>>Inactive</option>
+</select>
+</td></tr>
+<tr style="border:none;"><td colspan="2" style="border:none; text-align:right;">
+<button type="submit" class="btn btn-save"><?= $editData ? 'Update Branch' : 'Save Branch' ?></button>
+<?php if ($editData): ?>
+<a href="manage_zone_branch_map.php<?= $search !== '' ? '?search='.urlencode($search) : '' ?>" class="btn" style="background:#6c757d; color:#fff; margin-left: 10px;">Cancel</a>
+<?php endif; ?>
+</td></tr>
+</table>
+</form>
+</div>
+
+<div class="card">
+    <div class="top-controls">
+        <h4 style="margin:0;">Branch List</h4>
+        <div class="no-print" style="display:flex; gap:10px;">
+            <form method="get" class="search-form">
+                <input type="text" name="search" placeholder="Search by Zone, Branch or Code..." value="<?= h($search) ?>">
+                <button type="submit" class="btn btn-print" style="background:#007bff;">Search</button>
+                <a href="manage_zone_branch_map.php" class="btn btn-edit" style="background:#e2e8f0; color:#333;">Reset</a>
+            </form>
+            <button onclick="window.print()" class="btn btn-print">Print List</button>
+        </div>
+    </div>
+
+<table>
+<tr>
+<th>SL</th>
+<th>Zone</th>
+<th>Branch</th>
+<th>Code</th>
+<th>Status</th>
+<th class="no-print">Action</th>
+</tr>
+
+<?php if ($list && $list->num_rows > 0): $sl=1; while($r=$list->fetch_assoc()): ?>
+<tr id="row-<?= $r['id'] ?>"> <td><?= $sl++ ?></td>
+<td><?= h($r['zone_name']) ?></td>
+<td><?= h($r['branch_name']) ?></td>
+<td><?= h($r['branch_code']) ?></td>
+<td>
+    <?php if($r['status']): ?>
+        <span style="background:#d4edda; color:#155724; padding:2px 6px; border-radius:4px; font-size:12px;">Active</span>
+    <?php else: ?>
+        <span style="background:#f8d7da; color:#721c24; padding:2px 6px; border-radius:4px; font-size:12px;">Inactive</span>
+    <?php endif; ?>
+</td>
+<td class="no-print">
+<div style="display:flex; gap:5px;">
+    <a href="?edit=<?= $r['id'] ?><?= $searchQueryStr ?>#form-section" class="btn btn-edit" style="padding:4px 8px; font-size:12px;">Edit</a>
+    <a href="?delete=<?= $r['id'] ?><?= $searchQueryStr ?>" class="btn btn-del" style="padding:4px 8px; font-size:12px;"
+       onclick="return confirm('Are you sure you want to delete this branch?')">Delete</a>
+</div>
+</td>
+</tr>
+<?php endwhile; else: ?>
+<tr><td colspan="6" style="text-align:center;">No records found.</td></tr>
+<?php endif; ?>
+
+</table>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,102 @@
+[2026-05-05 11:29:02] IP: 10.192.130.12
+SELECT
+    id, penalty_id, vendor_name, service_type, machine_type,
+    penalty_from, down_time_minutes,
+    TIMESTAMPDIFF(MINUTE, penalty_from, NOW()) AS live_down_minutes
+FROM penalty_reports
+WHERE penalty_id = 'PEN-2026-00070';
+
+[2026-05-05 11:31:26] IP: 10.192.130.12
+SELECT *
+FROM vendor_penalty_rules
+WHERE active_status = 1
+  AND LOWER(TRIM(vendor_name)) = LOWER(TRIM('Orient Computers'))
+  AND service_type = 'UPS'
+  AND TIMESTAMPDIFF(MINUTE, '2026-10-04 11:01:00', NOW())
+      BETWEEN from_minute AND to_minute;
+
+[2026-05-06 10:04:23] IP: 10.192.130.12
+UPDATE cctv_list
+SET network = 'NOT OK'
+WHERE network = 'DOWN';
+
+[2026-05-06 10:04:42] IP: 10.192.130.12
+UPDATE cctv_list
+SET status = 'Old CCTV System'
+WHERE status = 'Old Model DVR';
+
+[2026-05-06 11:09:24] IP: 10.192.130.12
+Describe cctv_set_requisition
+
+[2026-05-06 14:34:25] IP: 10.192.130.12
+UPDATE cctv_list
+SET status = 'HDD Problem'
+WHERE status = 'Hard Disk Problem';
+
+[2026-05-06 14:43:50] IP: 10.192.130.12
+DESCRIBE cctv_set_requisition;
+
+[2026-05-06 15:02:22] IP: 10.192.130.12
+ALTER TABLE cctv_set_requisition
+MODIFY status ENUM(
+'Waiting_for_Approval',
+'Sent_to_CPD',
+'Waiting_for_Technical_Evaluation',
+'Waiting_for_Work_Order',
+'Waiting_for_Delivery',
+'Waiting_for_QC',
+'Technical_Evaluation_Passed',
+'Technical_Evaluation_Failed',
+'QC_Passed',
+'QC_Failed',
+'Waiting_for_Installation',
+'Installed',
+'Closed',
+'Cancelled'
+) DEFAULT 'Waiting_for_Approval';
+
+[2026-05-10 10:26:46] IP: 10.192.130.12
+CREATE TABLE IF NOT EXISTS cctv_list_remarks_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cctv_list_id INT NOT NULL,
+    old_remarks TEXT NULL,
+    new_remarks TEXT NULL,
+    updated_by VARCHAR(100) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_cctv_list_id (cctv_list_id),
+    CONSTRAINT fk_cctv_remarks_history_cctv_list
+        FOREIGN KEY (cctv_list_id)
+        REFERENCES cctv_list(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+[2026-05-10 15:26:14] IP: 10.192.130.12
+UPDATE cctv_list
+SET zone_name = 'Barishal'
+WHERE zone_name = 'Barishal Zone';
+
+[2026-05-10 15:36:01] IP: 10.192.130.12
+DESCRIBE cctv_list;
+
+[2026-07-05 11:14:33] IP: 10.192.130.12
+DESCRIBE atm_sg;
+
+[2026-07-05 11:15:27] IP: 10.192.130.12
+ALTER TABLE atm_sg ADD COLUMN branch_code VARCHAR(50) NULL AFTER atm_id;
+
+[2026-07-07 17:00:30] IP: 10.192.130.12
+UPDATE penalty_reports 
+SET service_type = 'CRM', 
+    machine_type = 'CRM' 
+WHERE vendor_name IN ('Technomedia Limited', 'Zara Zaman Technology Limited') 
+  AND atm_id LIKE 'IBCR%';
+
+[2026-07-08 10:28:33] IP: 10.192.130.12
+DELETE FROM zone_master WHERE BINARY zone_name = 'CTG South';
+
+[2026-07-08 10:36:18] IP: 10.192.130.12
+SELECT id, zone_name FROM zone_master WHERE zone_name LIKE '%CTG South%';
+
+[2026-07-08 10:40:23] IP: 10.192.130.12
+DELETE FROM zone_master WHERE id = 7;
+

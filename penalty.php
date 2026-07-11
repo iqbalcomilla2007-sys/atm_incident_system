@@ -1,0 +1,500 @@
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+date_default_timezone_set('Asia/Dhaka');
+
+include 'auth_check.php';
+include 'db.php';
+include 'includes/functions.php';
+
+Auth::requirePermission('manage_penalty');
+
+if (!function_exists('h')) {
+    function h($v) {
+        return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+function tableColumnExists($conn, $table, $column) {
+    $table  = $conn->real_escape_string($table);
+    $column = $conn->real_escape_string($column);
+
+    $res = $conn->query("SHOW COLUMNS FROM `$table` LIKE '$column'");
+    return ($res && $res->num_rows > 0);
+}
+
+$incident_id = isset($_GET['incident_id']) ? (int)$_GET['incident_id'] : (isset($_GET['id']) ? (int)$_GET['id'] : 0);
+
+if ($incident_id <= 0) {
+    die('Invalid incident ID.');
+}
+
+/* ---------------------------------------------------------
+   Optional Column Check
+--------------------------------------------------------- */
+$hasResponsibleVendorName = tableColumnExists($conn, 'atm_update', 'responsible_vendor_name');
+$hasAtmUpdateAtmName      = tableColumnExists($conn, 'atm_update', 'atm_name');
+$hasAtmUpdateAtmVendor    = tableColumnExists($conn, 'atm_update', 'atm_vendor');
+$hasAtmUpdateUpsVendor    = tableColumnExists($conn, 'atm_update', 'ups_vendor');
+
+$hasAtmMasterAtmVendorId  = tableColumnExists($conn, 'atm_master', 'atm_vendor_id');
+$hasAtmMasterUpsVendorId  = tableColumnExists($conn, 'atm_master', 'ups_vendor_id');
+
+$hasProblemVendorType     = tableColumnExists($conn, 'problem_master', 'responsible_vendor_type');
+
+/* ---------------------------------------------------------
+   Dynamic Select Parts
+--------------------------------------------------------- */
+$responsibleVendorSelect = $hasResponsibleVendorName
+    ? "a.responsible_vendor_name"
+    : "'' AS responsible_vendor_name";
+
+$incidentAtmNameSelect = $hasAtmUpdateAtmName
+    ? "a.atm_name AS incident_atm_name"
+    : "'' AS incident_atm_name";
+
+$incidentAtmVendorSelect = $hasAtmUpdateAtmVendor
+    ? "a.atm_vendor AS incident_atm_vendor"
+    : "'' AS incident_atm_vendor";
+
+$incidentUpsVendorSelect = $hasAtmUpdateUpsVendor
+    ? "a.ups_vendor AS incident_ups_vendor"
+    : "'' AS incident_ups_vendor";
+
+$problemVendorTypeSelect = $hasProblemVendorType
+    ? "pm.responsible_vendor_type"
+    : "'' AS responsible_vendor_type";
+
+$vendorJoinSql = "";
+if ($hasAtmMasterAtmVendorId) {
+    $vendorJoinSql .= " LEFT JOIN vendor_master av ON m.atm_vendor_id = av.id ";
+} else {
+    $vendorJoinSql .= " LEFT JOIN vendor_master av ON 1 = 0 ";
+}
+
+if ($hasAtmMasterUpsVendorId) {
+    $vendorJoinSql .= " LEFT JOIN vendor_master uv ON m.ups_vendor_id = uv.id ";
+} else {
+    $vendorJoinSql .= " LEFT JOIN vendor_master uv ON 1 = 0 ";
+}
+
+$problemJoinSql = $hasProblemVendorType
+    ? " LEFT JOIN problem_master pm ON LOWER(TRIM(a.problem)) = LOWER(TRIM(pm.problem_name)) "
+    : " LEFT JOIN problem_master pm ON 1 = 0 ";
+
+/* ---------------------------------------------------------
+   Incident Fetch
+--------------------------------------------------------- */
+$sql = "
+    SELECT 
+        a.incident_id,
+        a.atm_id,
+        a.problem,
+        a.created_at,
+        a.incident_status,
+
+        $responsibleVendorSelect,
+        $incidentAtmNameSelect,
+        $incidentAtmVendorSelect,
+        $incidentUpsVendorSelect,
+
+        m.atm_name AS master_atm_name,
+        m.atm_vendor AS master_atm_vendor,
+        m.ups_vendor AS master_ups_vendor,
+        m.zone_name,
+        m.branch_name,
+
+        COALESCE(
+            NULLIF(TRIM(av.vendor_name), ''),
+            NULLIF(TRIM(m.atm_vendor), ''),
+            NULLIF(TRIM(" . ($hasAtmUpdateAtmVendor ? "a.atm_vendor" : "''") . "), '')
+        ) AS atm_vendor_final,
+
+        COALESCE(
+            NULLIF(TRIM(uv.vendor_name), ''),
+            NULLIF(TRIM(m.ups_vendor), ''),
+            NULLIF(TRIM(" . ($hasAtmUpdateUpsVendor ? "a.ups_vendor" : "''") . "), '')
+        ) AS ups_vendor_final,
+
+        $problemVendorTypeSelect
+
+    FROM atm_update a
+    LEFT JOIN atm_master m 
+        ON TRIM(a.atm_id) = TRIM(m.atm_id)
+    $vendorJoinSql
+    $problemJoinSql
+    WHERE a.incident_id = ?
+    LIMIT 1
+";
+
+$stmt = $conn->prepare($sql);
+if (!$stmt) {
+    die("Prepare failed: " . $conn->error);
+}
+
+$stmt->bind_param("i", $incident_id);
+$stmt->execute();
+$res = $stmt->get_result();
+$incident = $res->fetch_assoc();
+$stmt->close();
+
+if (!$incident) {
+    die('Incident not found.');
+}
+
+/* ---------------------------------------------------------
+   Basic Incident Data
+--------------------------------------------------------- */
+$atm_id        = trim($incident['atm_id'] ?? '');
+$atm_name      = trim($incident['master_atm_name'] ?? '');
+
+if ($atm_name === '') {
+    $atm_name = trim($incident['incident_atm_name'] ?? '');
+}
+
+$incident_name = trim($incident['problem'] ?? '');
+$raw_created_at = $incident['created_at'] ?? date('Y-m-d H:i:s');
+$zone_name     = trim($incident['zone_name'] ?? '');
+$branch_name   = trim($incident['branch_name'] ?? '');
+
+// Format Created At to DD/MM/YYYY hh:mm A
+$created_at_display = date('d/m/Y h:i A', strtotime($raw_created_at));
+
+$vendor_ticket_no = '';
+$remarks          = '';
+
+/* ---------------------------------------------------------
+   Correct Vendor + Service Type Logic
+--------------------------------------------------------- */
+$problemVendorType      = strtoupper(trim($incident['responsible_vendor_type'] ?? ''));
+$savedResponsibleVendor = trim($incident['responsible_vendor_name'] ?? '');
+
+$atmVendor = trim($incident['atm_vendor_final'] ?? '');
+$upsVendor = trim($incident['ups_vendor_final'] ?? '');
+
+$service_type = 'ATM';
+$machine_type = 'ATM';
+
+// 1. Initial Check from Problem Type
+if ($problemVendorType === 'UPS') {
+    $service_type = 'UPS';
+    $machine_type = '';
+} elseif ($problemVendorType === 'CRM') {
+    $service_type = 'CRM';
+    $machine_type = 'CRM';
+} elseif ($problemVendorType === 'ATM') {
+    $service_type = 'ATM';
+    $machine_type = 'ATM';
+} elseif (stripos($incident_name, 'UPS') !== false) {
+    $service_type = 'UPS';
+    $machine_type = '';
+}
+
+// 2. Determine Responsible Vendor 
+if ($service_type === 'UPS' && $upsVendor !== '') {
+    $default_vendor = $upsVendor;
+} elseif ($savedResponsibleVendor !== '') {
+    $default_vendor = $savedResponsibleVendor;
+} elseif ($atmVendor !== '') {
+    $default_vendor = $atmVendor;
+} else {
+    $default_vendor = $upsVendor;
+}
+
+// 3. New Rule: If Responsible Vendor == ATM Vendor AND ATM ID starts with IBCR
+if ($default_vendor === $atmVendor && stripos($atm_id, 'IBCR') === 0) {
+    $service_type = 'CRM';
+    $machine_type = 'CRM';
+}
+
+$vendor_name  = $default_vendor;
+$penalty_from = $raw_created_at;
+
+/* ---------------------------------------------------------
+   Penalty ID Preview
+--------------------------------------------------------- */
+$year = date('Y');
+$nextNo = 1;
+
+$r = $conn->query("SELECT id FROM penalty_reports ORDER BY id DESC LIMIT 1");
+if ($r && $row = $r->fetch_assoc()) {
+    $nextNo = ((int)$row['id']) + 1;
+}
+
+$preview_penalty_id = 'PEN-' . $year . '-' . str_pad((string)$nextNo, 5, '0', STR_PAD_LEFT);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Add Penalty</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: #f4f6f9;
+        }
+
+        .container {
+            width: 95%;
+            max-width: 1100px;
+            margin: 20px auto;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.08);
+            padding: 20px;
+            margin-bottom: 18px;
+        }
+
+        h2 {
+            margin: 0 0 15px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 14px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            font-size: 13px;
+        }
+
+        input[type="text"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            min-height: 90px;
+            resize: vertical;
+        }
+
+        .btn {
+            display: inline-block;
+            text-decoration: none;
+            padding: 10px 14px;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            color: #fff;
+            margin-right: 8px;
+            font-size: 14px;
+        }
+
+        .btn-blue { background: #007bff; }
+        .btn-green { background: #28a745; }
+        .btn-dark { background: #343a40; }
+        .btn-secondary { background: #6c757d; }
+
+        .muted {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .readonly-box {
+            background: #f8f9fa;
+        }
+
+        .vendor-warning {
+            background: #fdecea;
+            border: 1px solid #f5c2c7;
+            color: #842029;
+            padding: 10px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            font-size: 13px;
+        }
+
+        .highlight-label {
+            background: #fff3cd;
+            color: #856404;
+            padding: 4px 8px;
+            border-radius: 5px;
+            border: 1px solid #ffeeba;
+            display: inline-block;
+            font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+<?php include_once __DIR__ . '/includes/navbar.php'; ?>
+<div class="container">
+
+    <div class="card">
+        <h2>Add Penalty</h2>
+
+        <p class="muted">
+            Penalty ID Preview:
+            <strong><?php echo h($preview_penalty_id); ?></strong>
+        </p>
+
+        <div style="margin-bottom:15px;">
+            <a class="btn btn-secondary" href="dashboard_ajax_v2.php">Dashboard</a>
+            <a class="btn btn-dark" href="penalty_summary_report.php">Penalty Summary</a>
+        </div>
+
+        <?php if ($vendor_name === ''): ?>
+            <div class="vendor-warning">
+                Responsible vendor could not be detected. Please check ATM Master vendor, UPS vendor, and problem mapping.
+            </div>
+        <?php endif; ?>
+
+        <form method="post" action="save_penalty.php">
+            <input type="hidden" name="incident_id" value="<?php echo (int)$incident_id; ?>">
+
+            <div class="grid">
+                <div>
+                    <label>Incident ID</label>
+                    <input type="text" class="readonly-box" value="<?php echo h($incident_id); ?>" readonly>
+                </div>
+
+                <div>
+                    <label>ATM ID</label>
+                    <input type="text" name="atm_id" value="<?php echo h($atm_id); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>ATM Name</label>
+                    <input type="text" value="<?php echo h($atm_name); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>Incident Name</label>
+                    <input type="text" name="incident_name" value="<?php echo h($incident_name); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>Zone</label>
+                    <input type="text" value="<?php echo h($zone_name); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>Branch</label>
+                    <input type="text" value="<?php echo h($branch_name); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>ATM Vendor</label>
+                    <input type="text" value="<?php echo h($atmVendor); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label>UPS Vendor</label>
+                    <input type="text" value="<?php echo h($upsVendor); ?>" readonly class="readonly-box">
+                </div>
+
+                <div>
+                    <label for="vendor_ticket_no">Vendor Ticket No</label>
+                    <input type="text" name="vendor_ticket_no" id="vendor_ticket_no" value="<?php echo h($vendor_ticket_no); ?>">
+                </div>
+
+                <div>
+                    <label for="vendor_name">
+                        <span class="highlight-label">Responsible Vendor</span>
+                    </label>
+                    <input type="text" name="vendor_name" id="vendor_name" value="<?php echo h($vendor_name); ?>" required>
+                </div>
+
+                <div>
+                    <label for="service_type">Service Type</label>
+                    <select name="service_type" id="service_type" required onchange="syncVendorByServiceType()">
+                        <option value="ATM" <?php echo ($service_type === 'ATM') ? 'selected' : ''; ?>>ATM</option>
+                        <option value="CRM" <?php echo ($service_type === 'CRM') ? 'selected' : ''; ?>>CRM</option>
+                        <option value="UPS" <?php echo ($service_type === 'UPS') ? 'selected' : ''; ?>>UPS</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="machine_type">Machine Type</label>
+                    <select name="machine_type" id="machine_type">
+                        <option value="">Select</option>
+                        <option value="ATM" <?php echo ($machine_type === 'ATM') ? 'selected' : ''; ?>>ATM</option>
+                        <option value="CRM" <?php echo ($machine_type === 'CRM') ? 'selected' : ''; ?>>CRM</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label for="penalty_from">Penalty From</label>
+                    <input type="text" name="penalty_from" id="penalty_from"
+                           value="<?php echo h(date('Y-m-d H:i', strtotime($penalty_from))); ?>" required>
+                </div>
+
+                <div>
+                    <label>Created At - Incident</label>
+                    <input type="text" value="<?php echo h($created_at_display); ?>" readonly class="readonly-box">
+                </div>
+            </div>
+
+            <div style="margin-top:14px;">
+                <label for="remarks">Remarks</label>
+                <textarea name="remarks" id="remarks"><?php echo h($remarks); ?></textarea>
+            </div>
+
+            <div style="margin-top:18px;">
+                <button type="submit" class="btn btn-green">Save Penalty</button>
+                <a href="penalty_summary_report.php" class="btn btn-secondary">Cancel</a>
+            </div>
+        </form>
+    </div>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+const ATM_VENDOR = <?php echo json_encode($atmVendor); ?>;
+const UPS_VENDOR = <?php echo json_encode($upsVendor); ?>;
+const SAVED_RESPONSIBLE_VENDOR = <?php echo json_encode($savedResponsibleVendor); ?>;
+
+function syncVendorByServiceType() {
+    const serviceType = document.getElementById('service_type').value;
+    const vendorInput = document.getElementById('vendor_name');
+    const machineType = document.getElementById('machine_type');
+
+    if (!vendorInput || !machineType) {
+        return;
+    }
+
+    if (serviceType === 'UPS') {
+        vendorInput.value = UPS_VENDOR || SAVED_RESPONSIBLE_VENDOR || '';
+        machineType.value = '';
+    } else if (serviceType === 'CRM') {
+        vendorInput.value = ATM_VENDOR || SAVED_RESPONSIBLE_VENDOR || '';
+        machineType.value = 'CRM';
+    } else {
+        vendorInput.value = ATM_VENDOR || SAVED_RESPONSIBLE_VENDOR || '';
+        machineType.value = 'ATM';
+    }
+}
+
+// Initialize Datepicker for Penalty From
+document.addEventListener('DOMContentLoaded', function() {
+    flatpickr("#penalty_from", {
+        enableTime: true,
+        dateFormat: "Y-m-d H:i",      // The format sent to backend (so PHP strtotime doesn't break)
+        altInput: true,
+        altFormat: "d/m/Y h:i K",     // The format user sees (DD/MM/YYYY hh:mm AM/PM)
+        allowInput: true
+    });
+});
+</script>
+
+</body>
+</html>
