@@ -33,8 +33,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_sg'])) {
 
     if ($branch_name === '') {
         $message = "Error: Branch Name is required.";
+    } elseif ($atm_id === '') {
+        $message = "Error: ATM ID is required.";
     } else {
-        if ($id > 0) {
+        // --- Duplicate ATM ID Check ---
+        $isDuplicateAtm = false;
+        $chkAtm = $conn->prepare("SELECT id FROM atm_sg WHERE atm_id = ? AND id != ?");
+        $chkAtm->bind_param("si", $atm_id, $id);
+        $chkAtm->execute();
+        if ($chkAtm->get_result()->num_rows > 0) {
+            $isDuplicateAtm = true;
+        }
+        $chkAtm->close();
+
+        if ($isDuplicateAtm) {
+            $message = "Error: ATM ID '$atm_id' already has security guard info entered.";
+        } elseif ($id > 0) {
             $stmt = $conn->prepare("UPDATE atm_sg SET atm_id=?, branch_code=?, branch_name=?, booth_address=?, sg1_name=?, sg1_mobile=?, sg2_name=?, sg2_mobile=?, sg3_name=?, sg3_mobile=?, supervisor_details=?, company_details=? WHERE id=?");
             $stmt->bind_param("ssssssssssssi", $atm_id, $branch_code, $branch_name, $booth_address, $sg1_name, $sg1_mobile, $sg2_name, $sg2_mobile, $sg3_name, $sg3_mobile, $supervisor_details, $company_details, $id);
             if ($stmt->execute()) { 
@@ -96,12 +110,14 @@ $listRes = $conn->query($listSql);
         .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .form-grid { display: grid; grid-template-columns: 150px 1fr 150px 1fr; gap: 10px; align-items: center; }
         input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[readonly] { background: #f1f5f9; color: #475569; }
         .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; color: #fff; }
         .btn-blue { background: #007bff; } .btn-green { background: #28a745; }
         .btn-red { background: #dc3545; } .btn-secondary { background: #6c757d; }
         table { width: 100%; border-collapse: collapse; margin-top: 10px; }
         table th, table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         table th { background: #f8f9fa; }
+        .atm-hint { font-size: 12px; color: #6c757d; margin-top: 4px; }
     </style>
 </head>
 <body>
@@ -118,14 +134,18 @@ $listRes = $conn->query($listSql);
 
     <div class="card">
         <h3><?= $editId > 0 ? 'Edit Guard Info' : 'Add New Guard Info' ?></h3>
-        <form method="post">
+        <form method="post" id="sgForm">
             <input type="hidden" name="id" value="<?= (int)$editId ?>">
             <div class="form-grid">
-                <label>ATM ID</label><input type="text" name="atm_id" value="<?= h($editData['atm_id'] ?? '') ?>">
-                <label>Branch Code</label><input type="text" name="branch_code" value="<?= h($editData['branch_code'] ?? '') ?>">
+                <label>ATM ID</label>
+                <div>
+                    <input type="text" id="atm_id_input" name="atm_id" value="<?= h($editData['atm_id'] ?? '') ?>" placeholder="Type ATM ID and press Tab/click away">
+                    <div class="atm-hint" id="atm_lookup_status"></div>
+                </div>
+                <label>Branch Code</label><input type="text" id="branch_code_input" name="branch_code" readonly value="<?= h($editData['branch_code'] ?? '') ?>">
                 
-                <label>Branch Name</label><input type="text" name="branch_name" required value="<?= h($editData['branch_name'] ?? '') ?>">
-                <label>Booth Address</label><input type="text" name="booth_address" value="<?= h($editData['booth_address'] ?? '') ?>">
+                <label>Branch Name</label><input type="text" id="branch_name_input" name="branch_name" required readonly value="<?= h($editData['branch_name'] ?? '') ?>">
+                <label>Booth Address</label><input type="text" id="booth_address_input" name="booth_address" value="<?= h($editData['booth_address'] ?? '') ?>">
                 
                 <label>SG 1 Name</label><input type="text" name="sg1_name" value="<?= h($editData['sg1_name'] ?? '') ?>">
                 <label>SG 1 Mobile</label><input type="text" name="sg1_mobile" value="<?= h($editData['sg1_mobile'] ?? '') ?>">
@@ -206,5 +226,54 @@ $listRes = $conn->query($listSql);
         </div>
     </div>
 </div>
+
+<script>
+const atmIdInput = document.getElementById('atm_id_input');
+const branchCodeInput = document.getElementById('branch_code_input');
+const branchNameInput = document.getElementById('branch_name_input');
+const boothAddressInput = document.getElementById('booth_address_input');
+const lookupStatus = document.getElementById('atm_lookup_status');
+
+function lookupAtmInfo() {
+    const atmId = atmIdInput.value.trim();
+    if (atmId === '') {
+        lookupStatus.textContent = '';
+        return;
+    }
+    lookupStatus.textContent = 'Looking up ATM...';
+    fetch('get_atm_info.php?atm_id=' + encodeURIComponent(atmId))
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // NOTE: get_atm_info.php যদি branch_code রিটার্ন না করে, এই ফিল্ডটা খালি থাকবে।
+                branchCodeInput.value = data.branch_code || '';
+                branchNameInput.value = data.branch_name || '';
+                boothAddressInput.value = data.atm_name || '';
+                lookupStatus.textContent = 'ATM found — details auto-filled.';
+                lookupStatus.style.color = '#198754';
+            } else {
+                lookupStatus.textContent = 'ATM ID not found in ATM Master.';
+                lookupStatus.style.color = '#dc3545';
+            }
+        })
+        .catch(() => {
+            lookupStatus.textContent = 'Lookup failed. Please try again.';
+            lookupStatus.style.color = '#dc3545';
+        });
+}
+
+atmIdInput.addEventListener('blur', lookupAtmInfo);
+atmIdInput.addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        lookupAtmInfo();
+    }
+});
+
+// Edit mode-এ পেজ লোড হওয়ার সময় ATM ID আগে থেকেই থাকলে auto-lookup করে না
+// (existing branch_code/branch_name ইতিমধ্যে DB থেকে এসেছে), ইউজার চাইলে
+// ATM ID বদলে আবার lookup করতে পারবে।
+</script>
+
 </body>
 </html>

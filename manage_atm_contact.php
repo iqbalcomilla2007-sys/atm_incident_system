@@ -16,29 +16,14 @@ $search = trim($_GET['search'] ?? '');
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
     $id = (int)($_POST['id'] ?? 0);
-    $search_param     = trim($_POST['search_param'] ?? ''); // ফর্ম থেকে সার্চ ডেটা ধরা হলো
+    $search_param     = trim($_POST['search_param'] ?? ''); 
     $branch_code      = trim($_POST['branch_code'] ?? '');
     $branch_name      = trim($_POST['branch_name'] ?? '');
-    
-    // Automatically fetch branch_code from zone_branch_map if matching branch_name exists (using soft match)
-    if ($branch_name !== '') {
-        $atmObj = new AtmMaster();
-        $mapKey = $atmObj->branchKeySql('branch_name');
-        $cleanParam = $atmObj->branchKeySql('?');
-        $stmtCode = $conn->prepare("SELECT branch_code FROM zone_branch_map WHERE $mapKey = $cleanParam LIMIT 1");
-        if ($stmtCode) {
-            $stmtCode->bind_param("s", $branch_name);
-            $stmtCode->execute();
-            $resCode = $stmtCode->get_result();
-            if ($resCode && $rowCode = $resCode->fetch_assoc()) {
-                $fetched_code = trim((string)$rowCode['branch_code']);
-                if ($fetched_code !== '') {
-                    $branch_code = $fetched_code;
-                }
-            }
-            $stmtCode->close();
-        }
-    }
+
+    // NOTE: branch_name এবং branch_code এখন dropdown থেকে সরাসরি (JS দিয়ে) আসে,
+    // তাই এখানে আর branch_name দিয়ে branch_code অনুমান/override করার দরকার নেই।
+    // (আগে এখানে LIMIT 1 দিয়ে auto-fetch করা হতো, যেটা একই branch_name এর একাধিক
+    // ভিন্ন branch_code থাকলে ভুল code বসিয়ে দিত এবং false duplicate error দিতো।)
 
     $custodian1_name  = trim($_POST['custodian1_name'] ?? '');
     $custodian1_mobile = trim($_POST['custodian1_mobile'] ?? '');
@@ -54,7 +39,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
         // --- Duplicate Branch Code Check ---
         $isDuplicate = false;
         if ($branch_code !== '') {
-            // Check if this branch_code exists in another record
             $chkStmt = $conn->prepare("SELECT id FROM atm_contact WHERE branch_code = ? AND id != ?");
             $chkStmt->bind_param("si", $branch_code, $id);
             $chkStmt->execute();
@@ -75,7 +59,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
                 $stmt = $conn->prepare("UPDATE atm_contact SET branch_code=?, branch_name=?, custodian1_name=?, custodian1_mobile=?, custodian2_name=?, custodian2_mobile=?, ip_phone_no=?, manager_name=?, manager_mobile=? WHERE id=?");
                 $stmt->bind_param("sssssssssi", $branch_code, $branch_name, $custodian1_name, $custodian1_mobile, $custodian2_name, $custodian2_mobile, $ip_phone_no, $manager_name, $manager_mobile, $id);
                 if ($stmt->execute()) { 
-                    // Redirect back to the exact row that was updated
                     header("Location: manage_atm_contact.php?msg=updated{$s_url}#row-{$id}");
                     exit;
                 } else { 
@@ -86,7 +69,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
                 $stmt->bind_param("sssssssss", $branch_code, $branch_name, $custodian1_name, $custodian1_mobile, $custodian2_name, $custodian2_mobile, $ip_phone_no, $manager_name, $manager_mobile);
                 if ($stmt->execute()) { 
                     $newId = $conn->insert_id;
-                    // Redirect back to the newly added row
                     header("Location: manage_atm_contact.php?msg=added{$s_url}#row-{$newId}");
                     exit;
                 } else { 
@@ -132,6 +114,15 @@ if ($search !== '') {
 }
 $listSql .= " ORDER BY id DESC";
 $listRes = $conn->query($listSql);
+
+// --- Branch dropdown data (zone_branch_map থেকে সব branch, নতুন) ---
+$branchMapRes = $conn->query("SELECT id, zone_name, branch_name, branch_code FROM zone_branch_map ORDER BY zone_name ASC, branch_name ASC");
+$branchMapRows = [];
+if ($branchMapRes) {
+    while ($bm = $branchMapRes->fetch_assoc()) {
+        $branchMapRows[] = $bm;
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -139,20 +130,20 @@ $listRes = $conn->query($listSql);
     <meta charset="UTF-8">
     <title>ATM Contact Management</title>
     <style>
-        html { scroll-behavior: smooth; } /* স্মুথ স্ক্রলিং এর জন্য */
+        html { scroll-behavior: smooth; }
         body { font-family: Arial, sans-serif; margin: 20px; background: #fef8f8; }
         .container { max-width: 1200px; margin: auto; }
         .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .form-grid { display: grid; grid-template-columns: 150px 1fr 150px 1fr; gap: 10px; align-items: center; }
-        input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[type="text"], select { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        input[readonly] { background: #f1f5f9; color: #475569; }
         .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; color: #fff; }
         .btn-pink { background: #e83e8c; } .btn-green { background: #28a745; }
         .btn-red { background: #dc3545; } .btn-secondary { background: #6c757d; }
-        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px;}
         table th, table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
         table th { background: #f8f9fa; }
         
-        /* টার্গেট হওয়া রো-টিকে হাইলাইট করার অ্যানিমেশন */
         tr:target {
             animation: highlight-row 2s ease-out;
         }
@@ -176,12 +167,40 @@ $listRes = $conn->query($listSql);
 
     <div id="form-section" class="card" style="border-top:5px solid #e83e8c;">
         <h3><?= $editId > 0 ? 'Edit contact Info' : 'Add New contact Info' ?></h3>
-        <form method="post">
+        <form method="post" id="contactForm">
             <input type="hidden" name="id" value="<?= (int)$editId ?>">
-            <input type="hidden" name="search_param" value="<?= h($search) ?>"> <div class="form-grid">
-                <label>Branch Code</label><input type="text" name="branch_code" value="<?= h($editData['branch_code'] ?? '') ?>">
-                <label>Branch Name</label><input type="text" name="branch_name" required value="<?= h($editData['branch_name'] ?? '') ?>">
-                
+            <input type="hidden" name="search_param" value="<?= h($search) ?>">
+            <input type="hidden" name="branch_name" id="branch_name_hidden" value="<?= h($editData['branch_name'] ?? '') ?>">
+
+            <div class="form-grid">
+                <label>Branch <span style="color:red;">*</span></label>
+                <select id="branch_select" required>
+                    <option value="">-- Select Branch --</option>
+                    <?php
+                    $currentName = $editData['branch_name'] ?? '';
+                    $currentCode = $editData['branch_code'] ?? '';
+                    $matchedExisting = false;
+                    foreach ($branchMapRows as $bm):
+                        $isSelected = ($editId > 0 && $bm['branch_name'] === $currentName && $bm['branch_code'] === $currentCode);
+                        if ($isSelected) $matchedExisting = true;
+                    ?>
+                        <option value="<?= h($bm['id']) ?>"
+                            data-name="<?= h($bm['branch_name']) ?>"
+                            data-code="<?= h($bm['branch_code']) ?>"
+                            <?= $isSelected ? 'selected' : '' ?>>
+                            <?= h($bm['zone_name']) ?> - <?= h($bm['branch_name']) ?> (<?= h($bm['branch_code']) ?>)
+                        </option>
+                    <?php endforeach; ?>
+                    <?php if ($editId > 0 && !$matchedExisting && $currentName !== ''): ?>
+                        <option value="__current__" data-name="<?= h($currentName) ?>" data-code="<?= h($currentCode) ?>" selected>
+                            <?= h($currentName) ?> (<?= h($currentCode) ?: '-' ?>) [current]
+                        </option>
+                    <?php endif; ?>
+                </select>
+
+                <label>Branch Code</label><input type="text" id="branch_code_display" readonly value="<?= h($editData['branch_code'] ?? '') ?>">
+                <input type="hidden" name="branch_code" id="branch_code_hidden" value="<?= h($editData['branch_code'] ?? '') ?>">
+
                 <label>IP Phone No</label><input type="text" name="ip_phone_no" value="<?= h($editData['ip_phone_no'] ?? '') ?>">
                 <label></label><div></div>
                 
@@ -212,13 +231,21 @@ $listRes = $conn->query($listSql);
             <table>
                 <thead>
                     <tr>
-                        <th>SL</th><th>Branch Code</th><th>Branch</th><th>Custodians</th><th>Manager</th><th>IP Phone</th><th>Action</th>
+                        <th>SL</th>
+                        <th>Branch Code</th>
+                        <th>Branch</th>
+                        <th>Custodians</th>
+                        <th>Manager</th>
+                        <th>IP Phone</th>
+                        <th>Last Modified</th>
+                        <th>Action</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if ($listRes && $listRes->num_rows > 0): ?>
                         <?php $sl = 1; while($row = $listRes->fetch_assoc()): ?>
-                        <tr id="row-<?= $row['id'] ?>"> <td><?= $sl++ ?></td>
+                        <tr id="row-<?= $row['id'] ?>"> 
+                            <td><?= $sl++ ?></td>
                             <td><?= h($row['branch_code']) ?></td>
                             <td><?= h($row['branch_name']) ?></td>
                             <td>
@@ -227,6 +254,19 @@ $listRes = $conn->query($listSql);
                             </td>
                             <td><?= h($row['manager_name']) ?> (<?= h($row['manager_mobile']) ?>)</td>
                             <td><?= h($row['ip_phone_no']) ?></td>
+                            
+                            <td>
+                                <?php 
+                                    // Handles fallback safely for both column name variations
+                                    $modTime = trim($row['last_modified_time'] ?? $row['created_at'] ?? '');
+                                    if ($modTime !== '' && $modTime !== '0000-00-00 00:00:00') {
+                                        echo h(date('d/m/Y h:i A', strtotime($modTime)));
+                                    } else {
+                                        echo '-';
+                                    }
+                                ?>
+                            </td>
+                            
                             <td>
                                 <div style="display:flex; gap:6px;">
                                     <a href="manage_atm_contact.php?edit=<?= $row['id'] ?><?= $searchQueryStr ?>#form-section"
@@ -246,12 +286,34 @@ $listRes = $conn->query($listSql);
                         </tr>
                         <?php endwhile; ?>
                     <?php else: ?>
-                        <tr><td colspan="7" style="text-align:center;">No records found.</td></tr>
+                        <tr><td colspan="8" style="text-align:center;">No records found.</td></tr>
                     <?php endif; ?>
                 </tbody>
             </table>
         </div>
     </div>
 </div>
+
+<script>
+// Branch select করলে branch_name ও branch_code auto fill হবে (hidden fields এর মাধ্যমে ফর্মে যাবে)
+document.getElementById('branch_select').addEventListener('change', function () {
+    const opt = this.options[this.selectedIndex];
+    const name = opt.getAttribute('data-name') || '';
+    const code = opt.getAttribute('data-code') || '';
+    document.getElementById('branch_name_hidden').value = name;
+    document.getElementById('branch_code_hidden').value = code;
+    document.getElementById('branch_code_display').value = code;
+});
+
+// Submit করার আগে check করুন যে branch select করা আছে কিনা
+document.getElementById('contactForm').addEventListener('submit', function (e) {
+    const nameVal = document.getElementById('branch_name_hidden').value.trim();
+    if (nameVal === '') {
+        e.preventDefault();
+        alert('Please select a Branch.');
+    }
+});
+</script>
+
 </body>
 </html>

@@ -19,6 +19,19 @@ function h($value) {
     return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8');
 }
 
+function tableExists($conn, $table) {
+    $table = $conn->real_escape_string($table);
+    $res = $conn->query("SHOW TABLES LIKE '$table'");
+    return ($res && $res->num_rows > 0);
+}
+
+/* Penalty count join (নতুন) */
+$hasPenaltyReports = tableExists($conn, 'penalty_reports');
+$penaltyCountSelect = $hasPenaltyReports ? "COALESCE(pc.penalty_count, 0) AS penalty_count" : "0 AS penalty_count";
+$penaltyJoinSql = $hasPenaltyReports
+    ? "LEFT JOIN (SELECT incident_id, COUNT(*) AS penalty_count FROM penalty_reports GROUP BY incident_id) pc ON a.incident_id = pc.incident_id"
+    : "";
+
 $sql = "
 SELECT 
     a.incident_id,
@@ -34,10 +47,12 @@ SELECT
     a.last_modified_by,
     m.zone_name,
     u.username AS modified_by_username,
-    lr.remark AS latest_remark
+    lr.remark AS latest_remark,
+    $penaltyCountSelect
 FROM atm_update a
 LEFT JOIN atm_master m ON a.atm_id = m.atm_id
 LEFT JOIN users u ON a.last_modified_by = u.id
+$penaltyJoinSql
 LEFT JOIN (
     SELECT r1.incident_id, r1.remark
     FROM incident_remarks r1
@@ -226,6 +241,7 @@ while ($row = $result->fetch_assoc()) {
                             <th>Created At</th>
                             <th>Modified By</th>
                             <th>Latest Remark</th>
+                            <th>Penalty</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -239,6 +255,7 @@ while ($row = $result->fetch_assoc()) {
                             if ($responsibleVendor === '' || $responsibleVendor === null) {
                                 $responsibleVendor = $row['ups_vendor'] ?? '';
                             }
+                            $penaltyCount = (int)($row['penalty_count'] ?? 0);
                             ?>
                             <tr>
                                 <td><?php echo $sl++; ?></td>
@@ -251,6 +268,7 @@ while ($row = $result->fetch_assoc()) {
                                 <td><?php echo !empty($row['created_at']) ? date('d-M-Y h:i A', strtotime($row['created_at'])) : ''; ?></td>
                                 <td><?php echo h($row['modified_by_username'] ?? '-'); ?></td>
                                 <td><?php echo !empty($row['latest_remark']) ? nl2br(h($row['latest_remark'])) : '-'; ?></td>
+                                <td><?php echo $penaltyCount > 0 ? $penaltyCount . ' time' . ($penaltyCount > 1 ? 's' : '') : '-'; ?></td>
                             </tr>
                         <?php } ?>
                     </tbody>

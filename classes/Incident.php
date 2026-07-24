@@ -27,6 +27,7 @@ class Incident {
                 a.atm_name,
                 a.zone_name,
                 a.branch_name,
+                a.branch_code,
                 a.group_no,
                 a.machine_type,
                 COALESCE(av.vendor_name, a.atm_vendor) AS atm_vendor,
@@ -60,6 +61,7 @@ class Incident {
         $row['machine_type'] = $machine_type;
         $row['atm_vendor'] = trim((string)($row['atm_vendor'] ?? ''));
         $row['ups_vendor'] = trim((string)($row['ups_vendor'] ?? ''));
+        $row['branch_code'] = trim((string)($row['branch_code'] ?? ''));
         return $row;
     }
 

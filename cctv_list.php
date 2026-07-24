@@ -5,7 +5,7 @@ include 'auth_check.php';
 include 'db.php';
 include 'includes/functions.php';
 
-// এনকোডিং ঠিক করা যাতে ÃƒÆ’... সমস্যা না হয়
+// এনকোডিং ঠিক করা যাতে ÃƒÆ’... সমস্যা না হয়
 mysqli_set_charset($conn, "utf8");
 
 Auth::requirePermission('cctv_dashboard');
@@ -117,6 +117,15 @@ $resStatus = $conn->query("
 while ($resStatus && $sRow = $resStatus->fetch_assoc()) { 
     $status_options[] = ['status' => (string)($sRow['status'] ?? ''), 'total' => (int)$sRow['total']]; 
 }
+
+/* --- STANDARD STATUS LIST (নতুন) ---
+   এই fixed list টা সবসময় Add/Edit ফর্মের Status dropdown-এ দেখাবে,
+   এমনকি কোনো existing record-এ সেই status না থাকলেও (যেমন নতুন যোগ করা "DVR Problem")। */
+$standard_statuses = ['OK', 'Offline', 'DVR Problem', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV'];
+$existing_statuses = array_filter(array_map(function ($s) { return $s['status']; }, $status_options), function ($s) {
+    return $s !== '';
+});
+$form_status_options = array_values(array_unique(array_merge($standard_statuses, $existing_statuses)));
 
 $zone_options = [];
 $resZone = $conn->query("
@@ -265,7 +274,7 @@ if (isset($_GET['forwarding_id'])) {
     $branchName = trim($baseRow['branch_name'] ?? '');
     
     // UPDATED QUERY: Fetch all required problem statuses
-    $stmt = $conn->prepare("SELECT atm_id, atm_name, status FROM cctv_list WHERE branch_name = ? AND status IN ('Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV') ORDER BY atm_name ASC, atm_id ASC");
+    $stmt = $conn->prepare("SELECT atm_id, atm_name, status FROM cctv_list WHERE branch_name = ? AND status IN ('Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV', 'DVR Problem') ORDER BY atm_name ASC, atm_id ASC");
     $stmt->bind_param("s", $branchName);
     $stmt->execute();
     $offlineRows = $stmt->get_result();
@@ -317,7 +326,8 @@ if (isset($_GET['forwarding_id'])) {
                 <?php endwhile; ?>
             </tbody>
         </table>
-        <p>ATM Booth CCTV is a critical security control. Continuous availability is essential for secure ATM operations. In view of the above, you are requested to solve the issue as soon as possible. Please keep shut off the ATM/CRM Transactions, if the CCTV system of ATM Booth does not function.</p>
+        <p>ATM Booth CCTV is a critical security control. Continuous availability is essential for secure ATM operations. In view of the above, you are requested to solve the issue as soon as possible. Please keep shut off the ATM/CRM Transactions, if the CCTV system of ATM Booth does not function and the footage is not recording properly.</p>
+<p> Please send the report on CCTV & vault password of ATM to ATMMD through Zonal ADC as per Circular Letter No.DBW/ATMMD/2025/28122 dated 16.07.2025 within first five working days of every month. </p>
         <p>Ma-assalam,<br>With Best Regards,<br><br><br>___________________________<br><strong>Md. Mahbub Al Hassan</strong><br>SVP & Head of ATMMD, DBW</p>
     </div>
     <div class="footer-box"><strong>ATM Management Division, DBW, HO</strong><br>75, Dilkusha C/A, Dhaka-1000, Bangladesh; email: group_atmmd@islamibankbd.com</div>
@@ -690,8 +700,8 @@ if (isset($_GET['print_summary'])) {
         <div class="form-grid">
             <div><label class="label">Status</label>
                 <select name="status">
-                    <?php foreach($status_options as $so): ?>
-                        <option value="<?= h($so['status']) ?>" <?= selected($editData['status']??'OK', $so['status']) ?>><?= h($so['status']?:'Blank') ?></option>
+                    <?php foreach($form_status_options as $so): ?>
+                        <option value="<?= h($so) ?>" <?= selected($editData['status']??'OK', $so) ?>><?= h($so?:'Blank') ?></option>
                     <?php endforeach; ?>
                 </select>
             </div>
@@ -770,7 +780,7 @@ if (isset($_GET['print_summary'])) {
                             
                             $statusStr = trim($row['status'] ?? '');
                             $isOffline = strcasecmp($statusStr, 'Offline') === 0;
-                            $isForwardable = in_array($statusStr, ['Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV']);
+                            $isForwardable = in_array($statusStr, ['Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV', 'DVR Problem']);
                     ?>
                     <tr id="cctv-row-<?= (int)$row['id'] ?>" class="<?= ($focus_id === (int)$row['id']) ? 'focus-row' : '' ?>">
                         <td><?= $sl++ ?></td>

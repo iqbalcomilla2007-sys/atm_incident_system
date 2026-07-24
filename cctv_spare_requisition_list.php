@@ -85,49 +85,89 @@ if (isset($_GET['forwarding']) && $_GET['forwarding'] === 'vendor' && isset($_GE
 <!DOCTYPE html>
 <html>
 <head>
-<meta charset="UTF-8">
-<title>Vendor Forwarding</title>
-<style>
-body{font-family:Arial,sans-serif;margin:25px;line-height:1.5;background:#f4f7fa;}
-.box{max-width:950px;margin:auto;background:#fff;padding:25px;border:1px solid #ddd;border-radius:8px;}
-.btn{padding:8px 12px;border:0;border-radius:5px;background:#0d6efd;color:#fff;cursor:pointer;text-decoration:none;display:inline-block;}
-@media print{.no-print{display:none;} body{background:#fff;}}
-</style>
+    <meta charset="UTF-8">
+    <title>Vendor Forwarding</title>
+    <style>
+    @page { size: A4; margin: 0; }
+    body { margin: 0; font-family: "Times New Roman", serif; color: #000; background: #f4f7fa; }
+    .page { width: 210mm; min-height: 297mm; box-sizing: border-box; padding: 15mm 20mm; display: flex; flex-direction: column; overflow: hidden; background: #fff; margin: 20px auto; border: 1px solid #ddd; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+    .main-content { flex: 1; font-size: 13.5px; line-height: 1.4; }
+    .letterhead { height: 70px; border-bottom: 2px solid #006837; margin-bottom: 15px; display: flex; justify-content: space-between; }
+    .left-logo img { height: 60px; }
+    .right-logo img { height: 50px; }
+    .meta { display: flex; justify-content: space-between; margin-bottom: 15px; }
+    p { margin: 8px 0; text-align: justify; }
+    .subject { font-weight: bold; text-decoration: underline; margin: 15px 0; }
+    .footer-box { text-align: center; font-size: 10.5px; line-height: 1.2; border-top: 1px solid #ccc; padding-top: 10px; margin-top: auto; }
+    .btn { padding: 8px 12px; border: 0; border-radius: 5px; background: #0d6efd; color: #fff; cursor: pointer; text-decoration: none; display: inline-block; font-family: Arial, sans-serif; font-size: 13px;}
+    .no-print-area { max-width: 210mm; margin: 20px auto 0; text-align: right; }
+    @media print { 
+        body { background: #fff; }
+        .page { margin: 0; border: none; border-radius: 0; box-shadow: none; height: 297mm; }
+        .no-print-area, nav, .navbar { display: none !important; } 
+    }
+    </style>
 </head>
-<body>
+<body onload="window.print()">
 <?php include_once __DIR__ . '/includes/navbar.php'; ?>
-<div class="box">
-    <div class="no-print" style="margin-bottom:15px;">
-        <button class="btn" onclick="copyText()">Copy Text</button>
-        <button class="btn" onclick="window.print()">Print</button>
-        <a class="btn" style="background:#6c757d;" href="cctv_spare_requisition_list.php">Back</a>
-    </div>
 
-    Attention: <?= h($r['contact_person'] ?? '-') ?>, Mobile: <?= h($r['mobile'] ?? '-') ?><br><br>
-    Subject: Request for installation/replacement of CCTV spare item(s) against Requisition No. <?= h($r['requisition_no'] ?? '-') ?>
-    <br><br>
-    You are requested to arrange necessary installation/replacement of the following CCTV spare item(s) at the mentioned ATM Booth on urgent basis.
-    <br>
-    <strong>ATM ID:</strong> <?= h($r['atm_id'] ?? '-') ?><br>
-    <strong>Booth Name:</strong> <?= h($r['booth_name'] ?? '-') ?><br>
-    <strong>Branch Name:</strong> <?= h($r['branch_name'] ?? '-') ?><br>
-    <strong>Branch Contact:</strong> <?= h($r['branch_contact'] ?? '-') ?><br><br>
-    <strong>IP Details:</strong> <?php
-        if (!empty($r['saved_ip_details'])) {
-            echo h($r['saved_ip_details']);
-        } else {
-            $ipParts = [];
-            if (!empty($r['monitoring_ip'])) $ipParts[] = 'Mon: ' . $r['monitoring_ip'];
-            if (!empty($r['internal_ip'])) $ipParts[] = 'Int: ' . $r['internal_ip'];
-            echo h(!empty($ipParts) ? implode(' | ', $ipParts) : '-');
-        }
-    ?><br><br>
-    Please reply with technician details.
+<div class="no-print-area">
+    <button class="btn" onclick="copyText()">Copy Text</button>
+    <button class="btn" onclick="window.print()">Print</button>
+    <a class="btn" style="background:#6c757d;" href="cctv_spare_requisition_list.php">Back</a>
 </div>
+
+<div class="page" id="printArea">
+    <div class="main-content">
+        <div class="letterhead">
+            <div class="left-logo"><img src="assets/ibbl_mark.png" alt="Left Logo"></div>
+            <div class="right-logo"><img src="assets/ibbl_header_logo.png" alt="Right Logo"></div>
+        </div>
+        
+        <div class="meta">
+            <div>Ref: IBBPLC/HO/DBW/ATMMD/CCTV/<?= date('Y') ?>/_______</div>
+            <div>Date: <?= date('d.m.Y') ?></div>
+        </div>
+        
+        <p>Attention: <strong><?= h($r['contact_person'] ?? '-') ?></strong><br>
+        Mobile: <?= h($r['mobile'] ?? '-') ?><br>
+        Vendor: <strong><?= h($r['assigned_vendor_name'] ?? '-') ?></strong></p>
+        
+        <p class="subject">Subject: Request for installation/replacement of CCTV spare item(s) against Requisition No. <?= h($r['requisition_no'] ?? '-') ?></p>
+        
+        <p>Dear Sir,</p>
+        <p>You are requested to arrange necessary service/ repair/replacement of neeful CCTV spare item(s) at the mentioned ATM Booth on urgent basis as per approved rate and specifications.</p>
+        
+        <div style="margin: 15px 0; line-height: 1.6;">
+            <strong>ATM ID:</strong> <?= h($r['atm_id'] ?? '-') ?><br>
+            <strong>Booth Name:</strong> <?= h($r['booth_name'] ?? '-') ?><br>
+            <strong>Branch Name:</strong> <?= h($r['branch_name'] ?? '-') ?><br>
+            <strong>Branch Contact:</strong> <?= h($r['branch_contact'] ?? '-') ?><br>
+            <strong>Problem & Action Details:</strong> <?= nl2br(h($r['problem_details'] ?? '-')) ?><br><br>
+            <strong>IP Details:</strong> <?php
+                if (!empty($r['saved_ip_details'])) {
+                    echo h($r['saved_ip_details']);
+                } else {
+                    $ipParts = [];
+                    if (!empty($r['monitoring_ip'])) $ipParts[] = 'Mon: ' . $r['monitoring_ip'];
+                    if (!empty($r['internal_ip'])) $ipParts[] = 'Int: ' . $r['internal_ip'];
+                    echo h(!empty($ipParts) ? implode(' | ', $ipParts) : '-');
+                }
+            ?>
+        </div>
+        
+        <p>Please reply with technician details.</p>
+        <br><br><br>
+        <p>___________________________<br><strong>CCTV & UPS Management Dept., ATMMD</strong><br>Islami Bank Bangladesh PLC.</p>
+    </div>
+    
+    <div class="footer-box"><strong>ATM Management Division, DBW, HO</strong><br>75, Dilkusha C/A, Dhaka-1000, Bangladesh; email: group_atmmd@islamibankbd.com</div>
+</div>
+
 <script>
 function copyText(){
-    const text = document.body.innerText.replace(/Copy Text|Print|Back/g, '').trim();
-    navigator.clipboard.writeText(text).then(() => alert('Copied.'));
+    const text = document.getElementById('printArea').innerText.trim();
+    navigator.clipboard.writeText(text).then(() => alert('Copied to clipboard.'));
 }
 </script>
 </body>
@@ -141,7 +181,7 @@ $search = trim($_GET['search'] ?? '');
 $status_filter = $_GET['status'] ?? '';
 $mobileSelect = ($vendorMobileColumn === 'mobile_no') ? "v.mobile_no AS mobile" : "v.mobile AS mobile";
 
-// Added COLLATE fix and ensuring all columns are selected
+// Added Subqueries to fetch bill details directly
 $sql = "SELECT 
             r.*, 
             l.atm_id, 
@@ -156,7 +196,9 @@ $sql = "SELECT
             v.contact_person,
             $mobileSelect,
             COALESCE((SELECT SUM(qty * item_price) FROM cctv_spare_requisition_items WHERE spare_requisition_id = r.id), 0) AS item_amount,
-            (SELECT remark FROM cctv_spare_requisition_remarks WHERE spare_requisition_id = r.id ORDER BY id DESC LIMIT 1) AS latest_remark
+            (SELECT remark FROM cctv_spare_requisition_remarks WHERE spare_requisition_id = r.id ORDER BY id DESC LIMIT 1) AS latest_remark,
+            (SELECT id FROM cctv_vendor_bills WHERE spare_requisition_id = r.id ORDER BY id DESC LIMIT 1) AS bill_id,
+            (SELECT total_amount FROM cctv_vendor_bills WHERE spare_requisition_id = r.id ORDER BY id DESC LIMIT 1) AS bill_total_amount
         FROM cctv_spare_requisition r
         LEFT JOIN cctv_locations l ON r.cctv_location_id = l.id
         LEFT JOIN cctv_list cl ON TRIM(l.atm_id) COLLATE utf8mb4_general_ci = TRIM(cl.atm_id) COLLATE utf8mb4_general_ci
@@ -190,7 +232,7 @@ if (!$res) {
         th,td{border:1px solid #dee2e6;padding:10px;text-align:left;font-size:13px;vertical-align:top;}
         th{background:#f8f9fa;}
         .btn{padding:5px 10px;border-radius:6px;text-decoration:none;color:#fff;font-size:11px;margin:2px;display:inline-block;font-weight:bold;border:none;}
-        .btn-blue{background:#0d6efd;} .btn-success{background:#198754;} .btn-warning{background:#ffc107;color:#000;}
+        .btn-blue{background:#0d6efd;} .btn-success{background:#198754;} .btn-warning{background:#ffc107;color:#000;} .btn-purple{background:#6f42c1;}
         .status-badge{padding:4px 8px;border-radius:12px;font-size:11px;color:#fff;background:#999;}
         .small-text{font-size:11px; color:#666;}
     </style>
@@ -204,8 +246,15 @@ if (!$res) {
         <div>
             <a href="cctv_dashboard.php" class="btn btn-blue" style="background:#6c757d;">Dashboard</a>
             <a href="cctv_spare_requisition.php" class="btn btn-success">+ New Requisition</a>
+
         </div>
     </div>
+
+    <?php if (isset($_GET['msg']) && $_GET['msg'] === 'bill_saved'): ?>
+        <div style="padding:10px; margin-bottom:15px; border-radius:6px; background:#d1e7dd; color:#0f5132; border:1px solid #badbcc;">
+            Bill entry saved successfully.
+        </div>
+    <?php endif; ?>
 
     <form method="GET" style="margin-bottom:20px; display:flex; gap:10px;">
         <input type="text" name="search" placeholder="Search ATM/Booth/Req..." value="<?= h($search) ?>" style="padding:10px; border:1px solid #ccc; border-radius:6px; width:350px;">
@@ -219,7 +268,7 @@ if (!$res) {
                 <th>Req. Details</th>
                 <th>ATM ID</th>
                 <th>Location Details</th>
-                <th>Branch Contact</th> <!-- Added This -->
+                <th>Branch Contact</th>
                 <th>IP Details</th>
                 <th>Assigned Vendor</th>
                 <th>Amount</th>
@@ -237,7 +286,7 @@ if (!$res) {
                     <div style="font-weight:bold;"><?= h($r['booth_name']) ?></div>
                     <div class="small-text"><?= h($r['branch_name']) ?></div>
                 </td>
-                <td><?= h($r['branch_contact'] ?: '-') ?></td> <!-- Added This -->
+                <td><?= h($r['branch_contact'] ?: '-') ?></td>
                 <td>
                     <?php 
                         if (!empty($r['ip_details'])) {
@@ -254,11 +303,25 @@ if (!$res) {
                     <?= h($r['assigned_vendor_name'] ?: '-') ?>
                     <div class="small-text"><?= h($r['contact_person']) ?></div>
                 </td>
-                <td style="font-weight:bold;color:#198754;">৳<?= number_format($r['item_amount'] + $r['service_charge'], 2) ?></td>
+                <td style="font-weight:bold;color:#198754;">
+                    <?php if (!empty($r['bill_total_amount'])): ?>
+                        ৳<?= number_format($r['bill_total_amount'], 2) ?>
+                        <br><span class="small-text" style="color:#6f42c1;">(Billed)</span>
+                    <?php else: ?>
+                        ৳<?= number_format($r['item_amount'] + ($r['service_charge'] ?? 0), 2) ?>
+                        <br><span class="small-text" style="color:#6c757d;">(Est.)</span>
+                    <?php endif; ?>
+                </td>
                 <td><span class="status-badge"><?= h($r['status']) ?></span></td>
                 <td>
                     <a href="cctv_spare_requisition.php?id=<?= $r['id'] ?>" class="btn btn-blue">Edit</a>
                     <a href="cctv_spare_requisition_list.php?forwarding=vendor&id=<?= $r['id'] ?>" target="_blank" class="btn btn-warning">Forward</a>
+                    
+                    <?php if (!empty($r['bill_id'])): ?>
+                        <a href="cctv_spare_bill_entry.php?id=<?= $r['bill_id'] ?>" class="btn btn-purple">Bill Edit</a>
+                    <?php else: ?>
+                        <a href="cctv_spare_bill_entry.php?spare_req_id=<?= $r['id'] ?>" class="btn" style="background:#20c997;">Bill Entry</a>
+                    <?php endif; ?>
                 </td>
             </tr>
         <?php endwhile; ?>

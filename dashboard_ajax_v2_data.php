@@ -88,18 +88,29 @@ $problemVendorTypeSelect = $hasProblemVendorType ? "pm.responsible_vendor_type A
 $problemJoinSql = $hasProblemVendorType ? "LEFT JOIN problem_master pm ON LOWER(TRIM(a.problem)) = LOWER(TRIM(pm.problem_name))" : "";
 
 /* ---------------------------------------------------------
+   PENALTY COUNT JOIN (নতুন)
+--------------------------------------------------------- */
+$hasPenaltyReports = tableExists($conn, 'penalty_reports');
+$penaltyCountSelect = $hasPenaltyReports ? "COALESCE(pc.penalty_count, 0) AS penalty_count" : "0 AS penalty_count";
+$penaltyJoinSql = $hasPenaltyReports
+    ? "LEFT JOIN (SELECT incident_id, COUNT(*) AS penalty_count FROM penalty_reports GROUP BY incident_id) pc ON a.incident_id = pc.incident_id"
+    : "";
+
+/* ---------------------------------------------------------
    MAIN QUERY
 --------------------------------------------------------- */
 $sql = "
 SELECT
     a.incident_id, a.atm_id, a.atm_name, a.problem, a.down_time, a.group_no, a.created_at, a.responsible_vendor_name, a.last_modified_by,
     u.username AS last_modified_username, m.zone_name, m.atm_vendor, m.ups_vendor, gd.zones, gd.group_leader_name, gd.group_members, lr.latest_remark,
-    $problemVendorTypeSelect
+    $problemVendorTypeSelect,
+    $penaltyCountSelect
 FROM atm_update a
 LEFT JOIN atm_master m ON TRIM(a.atm_id) = TRIM(m.atm_id)
 LEFT JOIN group_details gd ON a.group_no = gd.group_no
 LEFT JOIN users u ON a.last_modified_by = u.id
 $problemJoinSql
+$penaltyJoinSql
 LEFT JOIN (
     SELECT r1.incident_id, r1.remark AS latest_remark
     FROM incident_remarks r1
@@ -216,6 +227,9 @@ foreach ($data as $grp => $rows) {
             $responsibleVendor = $row['responsible_vendor_name'] ?: $row['atm_vendor'];
         }
 
+        // Penalty count (নতুন)
+        $penaltyCount = (int)($row['penalty_count'] ?? 0);
+
         echo '<tr>';
         echo '<td>' . $sl++ . '</td>';
         echo '<td>' . h($row['atm_id']) . '</td>';
@@ -228,10 +242,10 @@ foreach ($data as $grp => $rows) {
         echo '<td>' . h($row['last_modified_username'] ?? '-') . '</td>';
 
         echo '<td>';
-        // এখানে অ্যাকশন বাটনগুলোকে একটি ফ্লেক্স কন্টেইনারের ভেতরে রাখা হয়েছে
-        echo '<div class="action-buttons" style="display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-start;">'; 
+        // এখানে অ্যাকশন বাটনগুলোকে একটি ফ্লেক্স কন্টেইনারের ভেতরে রাখা হয়েছে
+        echo '<div class="action-buttons" style="display:flex; flex-wrap:wrap; gap:5px; justify-content:flex-start; align-items:center;">'; 
         
-        // ১. Edit বাটন (URL ছোট করা হয়েছে Forbidden এরর এড়াতে)
+        // ১. Edit বাটন (URL ছোট করা হয়েছে Forbidden এরর এড়াতে)
         echo '<a href="edit.php?id=' . (int)$row['incident_id'] . '" class="btn-action btn-edit" style="font-size:11px; padding:4px 8px; background:#0d6efd; color:#fff; border-radius:4px; text-decoration:none;">Edit</a>';
 
         // ২. Remark বাটন (Orange)
@@ -246,6 +260,11 @@ foreach ($data as $grp => $rows) {
         // ৫. Penalty বাটন (Deep Purple)
         if (Auth::hasPermission('manage_penalty')) {
             echo '<a href="penalty.php?incident_id=' . (int)$row['incident_id'] . '" class="btn-action btn-penalty" style="background:#6d28d9 !important; color:#fff !important; border:none; font-weight:bold; font-size:11px; padding:4px 8px; border-radius:4px; text-decoration:none;" onclick="return confirm(\'Impose penalty?\');">Penalty</a>';
+
+            // ৬. Penalty Count Badge (নতুন) - কতবার penalty impose হয়েছে সেটা দেখাবে
+            if ($penaltyCount > 0) {
+                echo '<span class="penalty-count-badge" title="This incident has been penalized ' . $penaltyCount . ' time(s)" style="background:#ede9fe; color:#5b21b6; border:1px solid #c4b5fd; font-weight:bold; font-size:11px; padding:4px 8px; border-radius:12px; white-space:nowrap;">Penalty: ' . $penaltyCount . ' time' . ($penaltyCount > 1 ? 's' : '') . '</span>';
+            }
         }
 
         echo '</div>'; // .action-buttons ডিভ শেষ

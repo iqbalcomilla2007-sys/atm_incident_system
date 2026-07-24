@@ -121,6 +121,10 @@ if ($displayRate <= 0 && $amcAmount > 0) {
                 <td><?=h($row['penalty_id'])?></td>
             </tr>
             <tr>
+                <th>Vendor Ticket No</th>
+                <td><?=h($row['vendor_ticket_no'] ?? '') ?: '-'?></td>
+            </tr>
+            <tr>
                 <th>ATM ID & Name</th>
                 <td><?=h($row['atm_id'])?> - <?=h($row['atm_name'] ?? '')?></td>
             </tr>
