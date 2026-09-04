@@ -1,0 +1,257 @@
+<?php
+date_default_timezone_set('Asia/Dhaka');
+include 'auth_check.php';
+include 'db.php';
+include 'includes/functions.php';
+
+Auth::requirePermission('manage_atm_master');
+
+$message = '';
+function h($value) { return htmlspecialchars((string)$value, ENT_QUOTES, 'UTF-8'); }
+
+$editId = isset($_GET['edit']) ? (int)$_GET['edit'] : 0;
+$search = trim($_GET['search'] ?? '');
+
+// --- Form Submissions ---
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
+    $id = (int)($_POST['id'] ?? 0);
+    $search_param     = trim($_POST['search_param'] ?? ''); // ফর্ম থেকে সার্চ ডেটা ধরা হলো
+    $branch_code      = trim($_POST['branch_code'] ?? '');
+    $branch_name      = trim($_POST['branch_name'] ?? '');
+    
+    // Automatically fetch branch_code from zone_branch_map if matching branch_name exists (using soft match)
+    if ($branch_name !== '') {
+        $atmObj = new AtmMaster();
+        $mapKey = $atmObj->branchKeySql('branch_name');
+        $cleanParam = $atmObj->branchKeySql('?');
+        $stmtCode = $conn->prepare("SELECT branch_code FROM zone_branch_map WHERE $mapKey = $cleanParam LIMIT 1");
+        if ($stmtCode) {
+            $stmtCode->bind_param("s", $branch_name);
+            $stmtCode->execute();
+            $resCode = $stmtCode->get_result();
+            if ($resCode && $rowCode = $resCode->fetch_assoc()) {
+                $fetched_code = trim((string)$rowCode['branch_code']);
+                if ($fetched_code !== '') {
+                    $branch_code = $fetched_code;
+                }
+            }
+            $stmtCode->close();
+        }
+    }
+
+    $custodian1_name  = trim($_POST['custodian1_name'] ?? '');
+    $custodian1_mobile = trim($_POST['custodian1_mobile'] ?? '');
+    $custodian2_name  = trim($_POST['custodian2_name'] ?? '');
+    $custodian2_mobile = trim($_POST['custodian2_mobile'] ?? '');
+    $ip_phone_no      = trim($_POST['ip_phone_no'] ?? '');
+    $manager_name     = trim($_POST['manager_name'] ?? '');
+    $manager_mobile    = trim($_POST['manager_mobile'] ?? '');
+
+    if ($branch_name === '') {
+        $message = "Error: Branch Name is required.";
+    } else {
+        // --- Duplicate Branch Code Check ---
+        $isDuplicate = false;
+        if ($branch_code !== '') {
+            // Check if this branch_code exists in another record
+            $chkStmt = $conn->prepare("SELECT id FROM atm_contact WHERE branch_code = ? AND id != ?");
+            $chkStmt->bind_param("si", $branch_code, $id);
+            $chkStmt->execute();
+            $chkRes = $chkStmt->get_result();
+            if ($chkRes->num_rows > 0) {
+                $isDuplicate = true;
+            }
+            $chkStmt->close();
+        }
+
+        if ($isDuplicate) {
+            $message = "Error: Branch Code '$branch_code' already exists in another contact.";
+        } else {
+            // Proceed with Insert / Update
+            $s_url = $search_param !== '' ? '&search=' . urlencode($search_param) : '';
+
+            if ($id > 0) {
+                $stmt = $conn->prepare("UPDATE atm_contact SET branch_code=?, branch_name=?, custodian1_name=?, custodian1_mobile=?, custodian2_name=?, custodian2_mobile=?, ip_phone_no=?, manager_name=?, manager_mobile=? WHERE id=?");
+                $stmt->bind_param("sssssssssi", $branch_code, $branch_name, $custodian1_name, $custodian1_mobile, $custodian2_name, $custodian2_mobile, $ip_phone_no, $manager_name, $manager_mobile, $id);
+                if ($stmt->execute()) { 
+                    // Redirect back to the exact row that was updated
+                    header("Location: manage_atm_contact.php?msg=updated{$s_url}#row-{$id}");
+                    exit;
+                } else { 
+                    $message = "Error updating info: " . $stmt->error; 
+                }
+            } else {
+                $stmt = $conn->prepare("INSERT INTO atm_contact (branch_code, branch_name, custodian1_name, custodian1_mobile, custodian2_name, custodian2_mobile, ip_phone_no, manager_name, manager_mobile) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+                $stmt->bind_param("sssssssss", $branch_code, $branch_name, $custodian1_name, $custodian1_mobile, $custodian2_name, $custodian2_mobile, $ip_phone_no, $manager_name, $manager_mobile);
+                if ($stmt->execute()) { 
+                    $newId = $conn->insert_id;
+                    // Redirect back to the newly added row
+                    header("Location: manage_atm_contact.php?msg=added{$s_url}#row-{$newId}");
+                    exit;
+                } else { 
+                    $message = "Error adding info: " . $stmt->error; 
+                }
+            }
+        }
+    }
+}
+
+// Search URL persistence for links
+$searchQueryStr = $search !== '' ? '&search=' . urlencode($search) : '';
+
+if (isset($_GET['delete']) && is_numeric($_GET['delete'])) {
+    $delId = (int)$_GET['delete'];
+    $stmt = $conn->prepare("DELETE FROM atm_contact WHERE id = ?");
+    $stmt->bind_param("i", $delId);
+    if ($stmt->execute()) { 
+        header("Location: manage_atm_contact.php?msg=deleted{$searchQueryStr}"); 
+        exit; 
+    }
+}
+
+// Status Messages
+if (isset($_GET['msg'])) {
+    if ($_GET['msg'] === 'deleted') $message = "Record deleted successfully.";
+    if ($_GET['msg'] === 'updated') $message = "Contact info updated successfully.";
+    if ($_GET['msg'] === 'added') $message = "Contact info added successfully.";
+}
+
+// --- Load Data ---
+
+$editData = [];
+if ($editId > 0) {
+    $resEdit = $conn->query("SELECT * FROM atm_contact WHERE id = $editId");
+    if ($resEdit) $editData = $resEdit->fetch_assoc();
+}
+
+$listSql = "SELECT * FROM atm_contact";
+if ($search !== '') {
+    $s = "%$search%";
+    $listSql .= " WHERE branch_code LIKE '$s' OR branch_name LIKE '$s' OR custodian1_name LIKE '$s' OR manager_name LIKE '$s'";
+}
+$listSql .= " ORDER BY id DESC";
+$listRes = $conn->query($listSql);
+?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ATM Contact Management</title>
+    <style>
+        html { scroll-behavior: smooth; } /* স্মুথ স্ক্রলিং এর জন্য */
+        body { font-family: Arial, sans-serif; margin: 20px; background: #fef8f8; }
+        .container { max-width: 1200px; margin: auto; }
+        .card { background: #fff; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        .form-grid { display: grid; grid-template-columns: 150px 1fr 150px 1fr; gap: 10px; align-items: center; }
+        input[type="text"] { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; }
+        .btn { padding: 8px 15px; border: none; border-radius: 4px; cursor: pointer; text-decoration: none; font-size: 14px; color: #fff; }
+        .btn-pink { background: #e83e8c; } .btn-green { background: #28a745; }
+        .btn-red { background: #dc3545; } .btn-secondary { background: #6c757d; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+        table th, table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+        table th { background: #f8f9fa; }
+        
+        /* টার্গেট হওয়া রো-টিকে হাইলাইট করার অ্যানিমেশন */
+        tr:target {
+            animation: highlight-row 2s ease-out;
+        }
+        @keyframes highlight-row {
+            0% { background-color: #fce4ec; }
+            100% { background-color: transparent; }
+        }
+    </style>
+</head>
+<body>
+<?php include_once __DIR__ . '/includes/navbar.php'; ?>
+<div class="container">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2>ATM contact / Custodian Management</h2>
+        <a href="manage_atm_master.php" class="btn btn-secondary">Back to ATM Master</a>
+    </div>
+
+    <?php if ($message): ?>
+        <div style="padding:10px; background:#fff3f3; color:#9b1c1c; border:1px solid #f5c2c2; margin-bottom:15px; border-radius:5px; font-weight:bold;"><?= h($message) ?></div>
+    <?php endif; ?>
+
+    <div id="form-section" class="card" style="border-top:5px solid #e83e8c;">
+        <h3><?= $editId > 0 ? 'Edit contact Info' : 'Add New contact Info' ?></h3>
+        <form method="post">
+            <input type="hidden" name="id" value="<?= (int)$editId ?>">
+            <input type="hidden" name="search_param" value="<?= h($search) ?>"> <div class="form-grid">
+                <label>Branch Code</label><input type="text" name="branch_code" value="<?= h($editData['branch_code'] ?? '') ?>">
+                <label>Branch Name</label><input type="text" name="branch_name" required value="<?= h($editData['branch_name'] ?? '') ?>">
+                
+                <label>IP Phone No</label><input type="text" name="ip_phone_no" value="<?= h($editData['ip_phone_no'] ?? '') ?>">
+                <label></label><div></div>
+                
+                <label>Custodian 1 Name</label><input type="text" name="custodian1_name" value="<?= h($editData['custodian1_name'] ?? '') ?>">
+                <label>Custodian 1 Mobile</label><input type="text" name="custodian1_mobile" value="<?= h($editData['custodian1_mobile'] ?? '') ?>">
+                
+                <label>Custodian 2 Name</label><input type="text" name="custodian2_name" value="<?= h($editData['custodian2_name'] ?? '') ?>">
+                <label>Custodian 2 Mobile</label><input type="text" name="custodian2_mobile" value="<?= h($editData['custodian2_mobile'] ?? '') ?>">
+                
+                <label>Manager Name</label><input type="text" name="manager_name" value="<?= h($editData['manager_name'] ?? '') ?>">
+                <label>Manager Mobile</label><input type="text" name="manager_mobile" value="<?= h($editData['manager_mobile'] ?? '') ?>">
+            </div>
+            <div style="margin-top:15px;">
+                <button type="submit" name="save_contact" class="btn btn-pink"><?= $editId > 0 ? 'Update contact' : 'Save contact' ?></button>
+                <?php if($editId > 0): ?><a href="manage_atm_contact.php<?= $search !== '' ? '?search='.urlencode($search) : '' ?>" class="btn btn-secondary">Cancel</a><?php endif; ?>
+            </div>
+        </form>
+    </div>
+
+    <div class="card">
+        <h3>Custodian List</h3>
+        <form method="get" style="margin-bottom:15px; display:flex; gap:10px;">
+            <input type="text" name="search" placeholder="Search branch, custodian, manager..." value="<?= h($search) ?>" style="flex:1;">
+            <button type="submit" class="btn btn-pink">Search</button>
+            <a href="manage_atm_contact.php" class="btn btn-secondary">Reset</a>
+        </form>
+        <div style="overflow-x:auto;">
+            <table>
+                <thead>
+                    <tr>
+                        <th>SL</th><th>Branch Code</th><th>Branch</th><th>Custodians</th><th>Manager</th><th>IP Phone</th><th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if ($listRes && $listRes->num_rows > 0): ?>
+                        <?php $sl = 1; while($row = $listRes->fetch_assoc()): ?>
+                        <tr id="row-<?= $row['id'] ?>"> <td><?= $sl++ ?></td>
+                            <td><?= h($row['branch_code']) ?></td>
+                            <td><?= h($row['branch_name']) ?></td>
+                            <td>
+                                1. <?= h($row['custodian1_name']) ?> (<?= h($row['custodian1_mobile']) ?>)<br>
+                                2. <?= h($row['custodian2_name']) ?> (<?= h($row['custodian2_mobile']) ?>)
+                            </td>
+                            <td><?= h($row['manager_name']) ?> (<?= h($row['manager_mobile']) ?>)</td>
+                            <td><?= h($row['ip_phone_no']) ?></td>
+                            <td>
+                                <div style="display:flex; gap:6px;">
+                                    <a href="manage_atm_contact.php?edit=<?= $row['id'] ?><?= $searchQueryStr ?>#form-section"
+                                       class="btn btn-secondary"
+                                       style="background:#ffc107; color:#000; padding:5px 10px;">
+                                       Edit
+                                    </a>
+
+                                    <a href="manage_atm_contact.php?delete=<?= $row['id'] ?><?= $searchQueryStr ?>"
+                                       class="btn btn-red"
+                                       style="padding:5px 10px;"
+                                       onclick="return confirm('Delete this contact?')">
+                                       Delete
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        <?php endwhile; ?>
+                    <?php else: ?>
+                        <tr><td colspan="7" style="text-align:center;">No records found.</td></tr>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+</body>
+</html>

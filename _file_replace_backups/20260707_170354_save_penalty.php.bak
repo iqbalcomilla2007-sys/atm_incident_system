@@ -1,0 +1,193 @@
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+date_default_timezone_set('Asia/Dhaka');
+
+include 'auth_check.php';
+include 'db.php';
+include 'includes/functions.php';
+include 'includes/penalty_functions.php';
+
+Auth::requirePermission('manage_penalty');
+
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header("Location: penalty_summary_report.php?error=invalid_request");
+    exit;
+}
+
+if (!function_exists('calculateMinutesDiffSafe')) {
+    function calculateMinutesDiffSafe($from, $to) {
+        if (empty($from) || empty($to)) {
+            return 0;
+        }
+
+        $fromTs = strtotime($from);
+        $toTs   = strtotime($to);
+
+        if ($fromTs === false || $toTs === false) {
+            return 0;
+        }
+
+        $diff = (int) floor(($toTs - $fromTs) / 60);
+
+        return max(0, $diff);
+    }
+}
+
+$incident_id      = (int)($_POST['incident_id'] ?? 0);
+$vendor_ticket_no = trim($_POST['vendor_ticket_no'] ?? '');
+$atm_id           = trim($_POST['atm_id'] ?? '');
+$incident_name    = trim($_POST['incident_name'] ?? '');
+$vendor_name      = trim($_POST['vendor_name'] ?? '');
+$service_type     = strtoupper(trim($_POST['service_type'] ?? ''));
+$machine_type     = trim($_POST['machine_type'] ?? '');
+$penalty_from_raw = trim($_POST['penalty_from'] ?? '');
+$remarks          = trim($_POST['remarks'] ?? '');
+
+if (
+    $incident_id <= 0 ||
+    $atm_id === '' ||
+    $incident_name === '' ||
+    $vendor_name === '' ||
+    $service_type === '' ||
+    $penalty_from_raw === ''
+) {
+    die('Required fields missing.');
+}
+
+$penalty_from_ts = strtotime($penalty_from_raw);
+if ($penalty_from_ts === false) {
+    die('Invalid penalty from date/time.');
+}
+$penalty_from = date('Y-m-d H:i:s', $penalty_from_ts);
+
+/* ---------------------------------------------------------
+   Get incident info
+--------------------------------------------------------- */
+$incident_created_at = null;
+$incident_status     = 'Open';
+
+$stmtInc = $conn->prepare("
+    SELECT created_at, incident_status
+    FROM atm_update
+    WHERE incident_id = ?
+    LIMIT 1
+");
+if (!$stmtInc) {
+    die("Prepare failed (incident): " . $conn->error);
+}
+
+$stmtInc->bind_param("i", $incident_id);
+$stmtInc->execute();
+$resInc = $stmtInc->get_result();
+$incRow = $resInc->fetch_assoc();
+$stmtInc->close();
+
+if ($incRow) {
+    if (!empty($incRow['created_at'])) {
+        $incident_created_at = $incRow['created_at'];
+    }
+    if (!empty($incRow['incident_status'])) {
+        $incident_status = trim((string)$incRow['incident_status']);
+    }
+}
+
+/* ---------------------------------------------------------
+   Penalty record create time
+--------------------------------------------------------- */
+$penalty_created_at = date('Y-m-d H:i:s');
+
+/* ---------------------------------------------------------
+   Calculate down time minutes
+--------------------------------------------------------- */
+$penalty_to = $penalty_created_at;
+$down_time_minutes = calculateMinutesDiffSafe($penalty_from, $penalty_to);
+
+/* ---------------------------------------------------------
+   Calculate penalty amount
+--------------------------------------------------------- */
+$penalty_amount = 0.00;
+$amc_amount = 0.00;
+$penalty_percent = 0.00;
+
+if (function_exists('calculatePenaltyAmount')) {
+    $calc = calculatePenaltyAmount($conn, $vendor_name, $service_type, $down_time_minutes);
+
+    if (is_array($calc)) {
+        $amc_amount       = (float)($calc['amc_amount'] ?? 0);
+        $penalty_percent  = (float)($calc['penalty_percent'] ?? 0);
+        $penalty_amount   = (float)($calc['penalty_amount'] ?? 0);
+    }
+}
+
+/* ---------------------------------------------------------
+   Generate penalty_id
+--------------------------------------------------------- */
+$year = date('Y');
+$nextNo = 1;
+
+$r = $conn->query("SELECT id FROM penalty_reports ORDER BY id DESC LIMIT 1");
+if ($r && $row = $r->fetch_assoc()) {
+    $nextNo = ((int)$row['id']) + 1;
+}
+
+$penalty_id = 'PEN-' . $year . '-' . str_pad((string)$nextNo, 5, '0', STR_PAD_LEFT);
+
+$imposed_by = $_SESSION['username'] ?? $_SESSION['full_name'] ?? 'system';
+$created_by = isset($_SESSION['user_id']) ? (int)$_SESSION['user_id'] : 0;
+
+/* ---------------------------------------------------------
+   Insert
+--------------------------------------------------------- */
+$sql = "
+    INSERT INTO penalty_reports (
+        penalty_id,
+        incident_id,
+        vendor_ticket_no,
+        atm_id,
+        incident_name,
+        vendor_name,
+        service_type,
+        machine_type,
+        penalty_from,
+        created_at,
+        down_time_minutes,
+        penalty_amount,
+        remarks,
+        imposed_by,
+        created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+";
+
+$stmt = $conn->prepare($sql);
+if (!$stmt) {
+    die("Prepare failed (insert): " . $conn->error);
+}
+
+$stmt->bind_param(
+    "sissssssssidssi",
+    $penalty_id,
+    $incident_id,
+    $vendor_ticket_no,
+    $atm_id,
+    $incident_name,
+    $vendor_name,
+    $service_type,
+    $machine_type,
+    $penalty_from,
+    $penalty_created_at,
+    $down_time_minutes,
+    $penalty_amount,
+    $remarks,
+    $imposed_by,
+    $created_by
+);
+
+if ($stmt->execute()) {
+    $stmt->close();
+    header("Location: penalty_summary_report.php?saved=1");
+    exit;
+} else {
+    die("Execute failed: " . $stmt->error);
+}

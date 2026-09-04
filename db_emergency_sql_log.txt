@@ -1,0 +1,176 @@
+[2026-05-05 11:29:02] IP: 10.192.130.12
+SELECT
+    id, penalty_id, vendor_name, service_type, machine_type,
+    penalty_from, down_time_minutes,
+    TIMESTAMPDIFF(MINUTE, penalty_from, NOW()) AS live_down_minutes
+FROM penalty_reports
+WHERE penalty_id = 'PEN-2026-00070';
+
+[2026-05-05 11:31:26] IP: 10.192.130.12
+SELECT *
+FROM vendor_penalty_rules
+WHERE active_status = 1
+  AND LOWER(TRIM(vendor_name)) = LOWER(TRIM('Orient Computers'))
+  AND service_type = 'UPS'
+  AND TIMESTAMPDIFF(MINUTE, '2026-10-04 11:01:00', NOW())
+      BETWEEN from_minute AND to_minute;
+
+[2026-05-06 10:04:23] IP: 10.192.130.12
+UPDATE cctv_list
+SET network = 'NOT OK'
+WHERE network = 'DOWN';
+
+[2026-05-06 10:04:42] IP: 10.192.130.12
+UPDATE cctv_list
+SET status = 'Old CCTV System'
+WHERE status = 'Old Model DVR';
+
+[2026-05-06 11:09:24] IP: 10.192.130.12
+Describe cctv_set_requisition
+
+[2026-05-06 14:34:25] IP: 10.192.130.12
+UPDATE cctv_list
+SET status = 'HDD Problem'
+WHERE status = 'Hard Disk Problem';
+
+[2026-05-06 14:43:50] IP: 10.192.130.12
+DESCRIBE cctv_set_requisition;
+
+[2026-05-06 15:02:22] IP: 10.192.130.12
+ALTER TABLE cctv_set_requisition
+MODIFY status ENUM(
+'Waiting_for_Approval',
+'Sent_to_CPD',
+'Waiting_for_Technical_Evaluation',
+'Waiting_for_Work_Order',
+'Waiting_for_Delivery',
+'Waiting_for_QC',
+'Technical_Evaluation_Passed',
+'Technical_Evaluation_Failed',
+'QC_Passed',
+'QC_Failed',
+'Waiting_for_Installation',
+'Installed',
+'Closed',
+'Cancelled'
+) DEFAULT 'Waiting_for_Approval';
+
+[2026-05-10 10:26:46] IP: 10.192.130.12
+CREATE TABLE IF NOT EXISTS cctv_list_remarks_history (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    cctv_list_id INT NOT NULL,
+    old_remarks TEXT NULL,
+    new_remarks TEXT NULL,
+    updated_by VARCHAR(100) NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_cctv_list_id (cctv_list_id),
+    CONSTRAINT fk_cctv_remarks_history_cctv_list
+        FOREIGN KEY (cctv_list_id)
+        REFERENCES cctv_list(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+[2026-05-10 15:26:14] IP: 10.192.130.12
+UPDATE cctv_list
+SET zone_name = 'Barishal'
+WHERE zone_name = 'Barishal Zone';
+
+[2026-05-10 15:36:01] IP: 10.192.130.12
+DESCRIBE cctv_list;
+
+[2026-07-05 11:14:33] IP: 10.192.130.12
+DESCRIBE atm_sg;
+
+[2026-07-05 11:15:27] IP: 10.192.130.12
+ALTER TABLE atm_sg ADD COLUMN branch_code VARCHAR(50) NULL AFTER atm_id;
+
+[2026-07-07 17:00:30] IP: 10.192.130.12
+UPDATE penalty_reports 
+SET service_type = 'CRM', 
+    machine_type = 'CRM' 
+WHERE vendor_name IN ('Technomedia Limited', 'Zara Zaman Technology Limited') 
+  AND atm_id LIKE 'IBCR%';
+
+[2026-07-08 10:28:33] IP: 10.192.130.12
+DELETE FROM zone_master WHERE BINARY zone_name = 'CTG South';
+
+[2026-07-08 10:36:18] IP: 10.192.130.12
+SELECT id, zone_name FROM zone_master WHERE zone_name LIKE '%CTG South%';
+
+[2026-07-08 10:40:23] IP: 10.192.130.12
+DELETE FROM zone_master WHERE id = 7;
+
+[2026-07-12 10:15:26] IP: 10.192.130.12
+DELETE t1 FROM atm_master t1 
+
+INNER JOIN atm_master t2 
+
+WHERE t1.id > t2.id AND t1.atm_name = t2.atm_name;
+
+[2026-07-12 10:52:43] IP: 10.192.130.12
+UPDATE atm_update a
+LEFT JOIN atm_master m ON a.atm_id = m.atm_id
+LEFT JOIN vendor_master av ON m.atm_vendor_id = av.id
+LEFT JOIN vendor_master uv ON m.ups_vendor_id = uv.id
+LEFT JOIN problem_master p ON a.problem = p.problem_name
+SET a.responsible_vendor_name = 
+    CASE 
+        WHEN UPPER(p.responsible_vendor_type) = 'UPS' THEN COALESCE(uv.vendor_name, m.ups_vendor, '')
+        WHEN UPPER(p.responsible_vendor_type) IN ('ATM', 'CRM') THEN COALESCE(av.vendor_name, m.atm_vendor, '')
+        WHEN p.responsible_vendor_type IS NOT NULL AND TRIM(p.responsible_vendor_type) != '' THEN p.responsible_vendor_type
+        WHEN COALESCE(av.vendor_name, m.atm_vendor, '') != '' THEN COALESCE(av.vendor_name, m.atm_vendor, '')
+        ELSE COALESCE(uv.vendor_name, m.ups_vendor, '')
+    END
+WHERE a.incident_status = 'Open' 
+AND (a.responsible_vendor_name IS NULL OR TRIM(a.responsible_vendor_name) = '');
+
+[2026-07-12 11:06:21] IP: 10.192.130.12
+SELECT atm_id, atm_name, problem 
+FROM atm_update 
+WHERE incident_status = 'Open' 
+AND (responsible_vendor_name IS NULL OR TRIM(responsible_vendor_name) = '');
+
+[2026-07-15 15:25:04] IP: 10.192.130.12
+UPDATE atm_master m 
+JOIN vendor_master v ON LOWER(TRIM(m.ups_vendor)) = LOWER(TRIM(v.vendor_name)) AND UPPER(TRIM(v.vendor_type)) = 'UPS'
+SET m.ups_vendor_id = v.id 
+WHERE m.ups_vendor_id IS NULL OR m.ups_vendor_id = 0;
+
+[2026-07-15 15:25:18] IP: 10.192.130.12
+UPDATE atm_master m 
+JOIN vendor_master v ON LOWER(TRIM(m.atm_vendor)) = LOWER(TRIM(v.vendor_name)) AND UPPER(TRIM(v.vendor_type)) = 'ATM'
+SET m.atm_vendor_id = v.id 
+WHERE m.atm_vendor_id IS NULL OR m.atm_vendor_id = 0;
+
+[2026-07-15 16:57:21] IP: 10.192.130.12
+ALTER TABLE atm_contact 
+CHANGE created_at last_modified_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP;
+
+[2026-07-27 14:47:41] IP: 10.192.130.12
+DESCRIBE vendor_master;
+
+[2026-07-28 12:33:07] IP: 10.192.130.12
+ALTER TABLE cctv_list 
+ADD COLUMN number_of_atm INT(11) NULL DEFAULT NULL AFTER atm_id,
+ADD COLUMN other_atm_id VARCHAR(255) NULL DEFAULT NULL AFTER number_of_atm;
+
+[2026-08-06 14:25:23] IP: 10.192.130.12
+DELETE FROM atm_master WHERE atm_id IN (
+    'IBBL0012', 'IBBL0073', 'IBBL0100', 'IBBL0119', 'IBBL0133', 'IBBL0288', 
+    'IBBL0297', 'IBBL0337', 'IBBL0348', 'IBBL0359', 'IBBL0367', 'IBBL0392', 
+    'IBBL0412', 'IBBL0420', 'IBBL0434', 'IBBL0437', 'IBBL0472', 'IBBL0485', 
+    'IBBL0507', 'IBBL0537', 'IBBL0559', 'IBBL0628', 'IBBL0667', 'IBBL0706', 
+    'IBBL0707', 'IBBL0709', 'IBBL0710', 'IBBL0752', 'IBBL0831', 'IBBL0893', 
+    'IBBL0952', 'IBBL1134', 'IBBL1167', 'IBBL1187', 'IBBL1252', 'IBBL1351', 
+    'IBBL1575', 'IBBL1635', 'IBBL1801', 'IBBL1827', 'IBBL1836', 'IBBL1837', 
+    'IBBL1839', 'IBBL1871', 'IBBL1884', 'IBBL1905', 'IBBL2035', 'IBBL2147', 
+    'IBBL2170', 'IBBL2188', 'IBBL2194', 'IBBL2223', 'IBCR5629', 'IBCR5768', 
+    'IBOA7063', 'IBOA7065', 'IBOA7200', 'IBOA7264', 'IBOA7284', 'IBOA7319', 
+    'IBOA7353', 'IBOA8008', 'IBOA8009', 'IBOA8013', 'IBOA8018', 'IBOA8032', 
+    'IBOA8052', 'IBOA8058', 'IBOA8073', 'IBOA8079', 'IBOA8147', 'IBOA8159', 
+    'IBOA8172', 'IBOA8175', 'IBOA9013', 'IBOA9016'
+);
+
+[2026-08-19 12:37:47] IP: 10.192.130.12
+SELECT * FROM atm_device_movement LIMIT 100;
+
