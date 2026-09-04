@@ -100,6 +100,7 @@ SELECT id, zone_name FROM zone_master WHERE zone_name LIKE '%CTG South%';
 [2026-07-08 10:40:23] IP: 10.192.130.12
 DELETE FROM zone_master WHERE id = 7;
 
+<<<<<<< HEAD
 [2026-07-12 10:15:26] IP: 10.192.130.12
 DELETE t1 FROM atm_master t1 
 
@@ -174,3 +175,5 @@ DELETE FROM atm_master WHERE atm_id IN (
 [2026-08-19 12:37:47] IP: 10.192.130.12
 SELECT * FROM atm_device_movement LIMIT 100;
 
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1

@@ -176,7 +176,11 @@ if ($displayRate <= 0 && $amcAmount > 0) {
             </tr>
         </table>
 
+<<<<<<< HEAD
         <p>Please let me know within the next 1 working day if you have any clarification.</p>
+=======
+        <p>You are requested to take necessary action regarding the penalty mentioned above.</p>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     </div>
 </body>
 </html>

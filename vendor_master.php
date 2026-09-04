@@ -14,7 +14,11 @@ $editData = null;
 $editContacts = ['mobile' => [], 'email' => [], 'address' => []];
 $search = trim($_GET['search'] ?? '');
 
+<<<<<<< HEAD
 $vendorTypeOptions = ['ATM', 'UPS', 'CCTV', 'MULTI', 'NETWORK', 'ED', 'OTHER'];
+=======
+$vendorTypeOptions = ['ATM', 'UPS', 'CCTV', 'MULTI', 'NETWORK', 'OTHER'];
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 
 $vendorObj = new Vendor();
 

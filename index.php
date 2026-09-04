@@ -105,6 +105,7 @@ $problems = $incidentObj->getProblems();
 <div class="container">
     <div class="card">
         <h2>Add Incident</h2>
+<<<<<<< HEAD
 
         <!-- Updated Error Message UI -->
         <?php if (isset($_GET['duplicate'])): ?>
@@ -114,6 +115,18 @@ $problems = $incidentObj->getProblems();
             </div>
         <?php endif; ?>
 
+=======
+<?php if (isset($_GET['duplicate'])): ?>
+    <div style="
+        background:#f8d7da;
+        color:#842029;
+        padding:10px;
+        border-radius:6px;
+        margin-bottom:10px;">
+        ⚠️ This ATM already has an open incident.
+    </div>
+<?php endif; ?>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         <form method="POST" action="save_incident.php" id="incidentForm">
             <input type="hidden" name="problem_vendor_mapping" id="problem_vendor_mapping" value="">
 
@@ -122,7 +135,11 @@ $problems = $incidentObj->getProblems();
                 <div class="field-block">
                     <label>ATM ID</label>
                     <input type="text" id="atm_id" name="atm_id"
+<<<<<<< HEAD
 value="<?php echo htmlspecialchars($_GET['atm_id'] ?? ''); ?>" required>
+=======
+value="<?php echo htmlspecialchars($_GET['atm_id'] ?? ''); ?>">
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 </div>
 
                 <div class="field-block">
@@ -174,7 +191,11 @@ value="<?php echo htmlspecialchars($_GET['atm_id'] ?? ''); ?>" required>
 
                 <div class="field-block">
                     <label>Responsible Vendor</label>
+<<<<<<< HEAD
                     <input type="text" name="responsible_vendor_name" id="responsible_vendor_name" required>
+=======
+                    <input type="text" name="responsible_vendor_name" id="responsible_vendor_name">
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     <div class="note">Problem অনুযায়ী auto-fill হবে, চাইলে manually change করতে পারবেন</div>
                 </div>
 
@@ -336,4 +357,8 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 </script>
 </body>
+<<<<<<< HEAD
 </html>
+=======
+</html>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1

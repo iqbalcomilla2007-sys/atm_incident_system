@@ -225,7 +225,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             <div class="col">
                 <label>Status</label>
                 <select name="status">
+<<<<<<< HEAD
                     <?php $statuses = ['Draft', 'Waiting for Approval', 'Vendor Assigned', 'Installed', 'Bill_Submitted', 'Cancelled'];
+=======
+                    <?php $statuses = ['Draft', 'Waiting for Approval', 'Vendor Assigned', 'Installed', 'Cancelled'];
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     foreach($statuses as $st): ?>
                         <option value="<?= $st ?>" <?= $form['status']==$st?'selected':'' ?>><?= $st ?></option>
                     <?php endforeach; ?>

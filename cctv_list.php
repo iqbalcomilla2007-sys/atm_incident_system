@@ -88,6 +88,7 @@ function buildCctvListWhere(&$params, &$types) {
     $status_filter = trim($_GET['status'] ?? '');
     $zone_filter = trim($_GET['zone_name'] ?? '');
     $where = [];
+<<<<<<< HEAD
     
     if ($search !== '') {
         $where[] = "(atm_id LIKE ? OR other_atm_id LIKE ? OR atm_name LIKE ? OR zone_name LIKE ? OR branch_name LIKE ? OR dvr_vendor LIKE ? OR ip_address LIKE ? OR m_ip LIKE ? OR remarks LIKE ?)";
@@ -98,6 +99,15 @@ function buildCctvListWhere(&$params, &$types) {
     if ($status_filter !== '') { $where[] = "status = ?"; $params[] = $status_filter; $types .= 's'; }
     if ($zone_filter !== '') { $where[] = "zone_name = ?"; $params[] = $zone_filter; $types .= 's'; }
     
+=======
+    if ($search !== '') {
+        $where[] = "(atm_id LIKE ? OR atm_name LIKE ? OR zone_name LIKE ? OR branch_name LIKE ? OR dvr_vendor LIKE ? OR ip_address LIKE ? OR m_ip LIKE ? OR remarks LIKE ?)";
+        $lk = "%$search%";
+        for ($i = 0; $i < 8; $i++) { $params[] = $lk; $types .= 's'; }
+    }
+    if ($status_filter !== '') { $where[] = "status = ?"; $params[] = $status_filter; $types .= 's'; }
+    if ($zone_filter !== '') { $where[] = "zone_name = ?"; $params[] = $zone_filter; $types .= 's'; }
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     return $where ? "WHERE " . implode(" AND ", $where) : "";
 }
 
@@ -121,7 +131,13 @@ while ($resStatus && $sRow = $resStatus->fetch_assoc()) {
     $status_options[] = ['status' => (string)($sRow['status'] ?? ''), 'total' => (int)$sRow['total']]; 
 }
 
+<<<<<<< HEAD
 /* --- STANDARD STATUS LIST --- */
+=======
+/* --- STANDARD STATUS LIST (নতুন) ---
+   এই fixed list টা সবসময় Add/Edit ফর্মের Status dropdown-এ দেখাবে,
+   এমনকি কোনো existing record-এ সেই status না থাকলেও (যেমন নতুন যোগ করা "DVR Problem")। */
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $standard_statuses = ['OK', 'Offline', 'DVR Problem', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV'];
 $existing_statuses = array_filter(array_map(function ($s) { return $s['status']; }, $status_options), function ($s) {
     return $s !== '';
@@ -154,9 +170,15 @@ if (isset($_GET['ajax'])) {
         $atm_id = trim($_GET['atm_id'] ?? '');
         $source = $_GET['source'] ?? 'list';
         if ($source === 'master') {
+<<<<<<< HEAD
             $stmt = $conn->prepare("SELECT id as atm_master_id, atm_id, atm_name as booth_name, zone_name, branch_code AS br_code, branch_name, monitoring_ip, internal_ip, subnet_mask, gateway FROM atm_master WHERE TRIM(atm_id) = ? LIMIT 1");
         } else {
             $stmt = $conn->prepare("SELECT atm_id, atm_name as booth_name, zone_name, br_code, branch_name, m_ip as monitoring_ip, ip_address as internal_ip, subnet as subnet_mask, gateway FROM cctv_list WHERE TRIM(atm_id) = ? LIMIT 1");
+=======
+            $stmt = $conn->prepare("SELECT id as atm_master_id, atm_id, atm_name as booth_name, zone_name, branch_name, monitoring_ip, internal_ip, subnet_mask, gateway FROM atm_master WHERE TRIM(atm_id) = ? LIMIT 1");
+        } else {
+            $stmt = $conn->prepare("SELECT atm_id, atm_name as booth_name, zone_name, branch_name, m_ip as monitoring_ip, ip_address as internal_ip, subnet as subnet_mask, gateway FROM cctv_list WHERE TRIM(atm_id) = ? LIMIT 1");
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         }
         $stmt->bind_param("s", $atm_id); $stmt->execute();
         $row = $stmt->get_result()->fetch_assoc(); $stmt->close();
@@ -175,7 +197,10 @@ if (isset($_GET['ajax'])) {
                 'atm_master_id' => $atmMasterId,
                 'atm_name' => $row['booth_name'] ?? '',
                 'zone_name' => $row['zone_name'] ?? '',
+<<<<<<< HEAD
                 'br_code' => $row['br_code'] ?? '',
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 'branch_name' => $row['branch_name'] ?? '',
                 'monitoring_ip' => $row['monitoring_ip'] ?? '',
                 'internal_ip' => $row['internal_ip'] ?? '',
@@ -262,7 +287,11 @@ if (isset($_GET['network_check_id'])) {
 }
 
 /* =========================================================
+<<<<<<< HEAD
    OFFLINE FORWARDING LETTER
+=======
+   OFFLINE FORWARDING LETTER (THE OFFICIAL IBBL FORMAT)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 ========================================================= */
 if (isset($_GET['forwarding_id'])) {
     $forwarding_id = (int)$_GET['forwarding_id'];
@@ -275,6 +304,10 @@ if (isset($_GET['forwarding_id'])) {
     if (!$baseRow) die("Record not found.");
     $branchName = trim($baseRow['branch_name'] ?? '');
     
+<<<<<<< HEAD
+=======
+    // UPDATED QUERY: Fetch all required problem statuses
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     $stmt = $conn->prepare("SELECT atm_id, atm_name, status FROM cctv_list WHERE branch_name = ? AND status IN ('Offline', 'HDD Problem', 'CC Camera Problem', 'Br. CCTV', 'Br.CCTV', 'DVR Problem') ORDER BY atm_name ASC, atm_id ASC");
     $stmt->bind_param("s", $branchName);
     $stmt->execute();
@@ -316,9 +349,15 @@ if (isset($_GET['forwarding_id'])) {
             <div>Date: <?= date('d.m.Y') ?></div>
         </div>
         <p>To<br>The Manager / In-charge<br><strong><?= h($branchName ?: 'Concerned Branch') ?> Branch</strong><br>Islami Bank Bangladesh PLC.</p>
+<<<<<<< HEAD
         <p class="subject">Subject: Request for necessary arrangement to bring ATM Booth CCTV systems operational and online.</p>
         <p>Muhtaram, Assalamu Alaikum,</p>
         <p>This is to inform you that the CCTV systems of the following ATM Booth(s) under your branch have been found <strong>faulty/ offline</strong> during monitoring from ATM Management Division:</p>
+=======
+        <p class="subject">Subject: Request for necessary arrangement to bring ATM Booth CCTV systems online.</p>
+        <p>Muhtaram, Assalamu Alaikum,</p>
+        <p>This is to inform you that the CCTV systems of the following ATM Booth(s) under your branch have been found <strong>faulty</strong> during monitoring from ATM Management Division:</p>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         <table class="data-table">
             <thead><tr><th width="10%">SL</th><th width="20%">ATM ID</th><th width="45%">ATM Booth Name</th><th width="25%">Status / Issue</th></tr></thead>
             <tbody>
@@ -375,8 +414,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['add_cctv']) || isset($_POST['update_cctv'])) {
         $id = (int)($_POST['id'] ?? 0);
         $atm_id = trim($_POST['atm_id'] ?? '');
+<<<<<<< HEAD
         $number_of_atm = nullIfBlank($_POST['number_of_atm']);
         $other_atm_id = trim($_POST['other_atm_id'] ?? '');
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         $zone_name = trim($_POST['zone_name'] ?? '');
         $br_code = trim($_POST['br_code'] ?? '');
         $branch_name = trim($_POST['branch_name'] ?? '');
@@ -405,11 +447,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($atm_id !== '') {
             if ($id > 0) {
+<<<<<<< HEAD
                 $stmt = $conn->prepare("UPDATE cctv_list SET atm_id=?, number_of_atm=?, other_atm_id=?, zone_name=?, br_code=?, branch_name=?, atm_name=?, network=?, backup=?, dvr_inst_date=?, dvr_vendor=?, dvr_brand=?, dvr_model=?, dvr_serial=?, dvr_password=?, camera=?, camera_inst_date=?, camera_vendor=?, hdd_size_tb=?, hdd_inst_date=?, hdd_serial=?, hdd_vendor=?, m_ip=?, ip_address=?, subnet=?, gateway=?, status=?, remarks=? WHERE id=?");
                 $stmt->bind_param("ssssssssssssssssssssssssssssi", $atm_id, $number_of_atm, $other_atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks, $id);
             } else {
                 $stmt = $conn->prepare("INSERT INTO cctv_list (atm_id, number_of_atm, other_atm_id, zone_name, br_code, branch_name, atm_name, network, backup, dvr_inst_date, dvr_vendor, dvr_brand, dvr_model, dvr_serial, dvr_password, camera, camera_inst_date, camera_vendor, hdd_size_tb, hdd_inst_date, hdd_serial, hdd_vendor, m_ip, ip_address, subnet, gateway, status, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
                 $stmt->bind_param("ssssssssssssssssssssssssssss", $atm_id, $number_of_atm, $other_atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks);
+=======
+                $stmt = $conn->prepare("UPDATE cctv_list SET atm_id=?, zone_name=?, br_code=?, branch_name=?, atm_name=?, network=?, backup=?, dvr_inst_date=?, dvr_vendor=?, dvr_brand=?, dvr_model=?, dvr_serial=?, dvr_password=?, camera=?, camera_inst_date=?, camera_vendor=?, hdd_size_tb=?, hdd_inst_date=?, hdd_serial=?, hdd_vendor=?, m_ip=?, ip_address=?, subnet=?, gateway=?, status=?, remarks=? WHERE id=?");
+                $stmt->bind_param("ssssssssssssssssssssssssssi", $atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks, $id);
+            } else {
+                $stmt = $conn->prepare("INSERT INTO cctv_list (atm_id, zone_name, br_code, branch_name, atm_name, network, backup, dvr_inst_date, dvr_vendor, dvr_brand, dvr_model, dvr_serial, dvr_password, camera, camera_inst_date, camera_vendor, hdd_size_tb, hdd_inst_date, hdd_serial, hdd_vendor, m_ip, ip_address, subnet, gateway, status, remarks) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)");
+                $stmt->bind_param("ssssssssssssssssssssssssss", $atm_id, $zone_name, $br_code, $branch_name, $atm_name, $network, $backup, $dvr_inst_date, $dvr_vendor, $dvr_brand, $dvr_model, $dvr_serial, $dvr_password, $camera, $camera_inst_date, $camera_vendor, $hdd_size_tb, $hdd_inst_date, $hdd_serial, $hdd_vendor, $m_ip, $ip_address, $subnet, $gateway, $status, $remarks);
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             }
             if ($stmt->execute()) {
                 header("Location: " . buildReturnLocationFromPost(['msg' => 'saved', 'focus_id' => $id > 0 ? $id : (int)$conn->insert_id]));
@@ -460,14 +510,18 @@ if ($isFiltered) {
                 <th>SL</th>
                 <th>Branch</th>
                 <th>ATM ID</th>
+<<<<<<< HEAD
                 <th>Other ATM ID</th>
                 <th>Number of ATM</th>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 <th>Booth Name</th>
                 <th>Zone</th>
                 <th>Status</th>
                 <th>Network</th>
                 <th>Monitoring IP</th>
                 <th>Internal IP</th>
+<<<<<<< HEAD
                 <th>Subnet Mask</th>
                 <th>Gateway</th>
                 <th>DVR Vendor</th>
@@ -483,6 +537,9 @@ if ($isFiltered) {
                 <th>HDD Vendor</th>
                 <th>HDD Install Date</th>
                 <th>Backup Status</th>
+=======
+                <th>DVR Vendor</th>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 <th>Remarks</th>
               </tr>";
         
@@ -492,14 +549,18 @@ if ($isFiltered) {
             echo "<td>" . $sl++ . "</td>";
             echo "<td>" . h($row['branch_name']) . "</td>";
             echo "<td>" . h($row['atm_id']) . "</td>";
+<<<<<<< HEAD
             echo "<td>" . h($row['other_atm_id']) . "</td>";
             echo "<td>" . h($row['number_of_atm']) . "</td>";
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             echo "<td>" . h($row['atm_name']) . "</td>";
             echo "<td>" . h($row['zone_name']) . "</td>";
             echo "<td>" . h($row['status']) . "</td>";
             echo "<td>" . h($row['network']) . "</td>";
             echo "<td>" . h($row['m_ip']) . "</td>";
             echo "<td>" . h($row['ip_address']) . "</td>";
+<<<<<<< HEAD
             echo "<td>" . h($row['subnet']) . "</td>";
             echo "<td>" . h($row['gateway']) . "</td>";
             echo "<td>" . h($row['dvr_vendor']) . "</td>";
@@ -515,6 +576,9 @@ if ($isFiltered) {
             echo "<td>" . h($row['hdd_vendor']) . "</td>";
             echo "<td>" . h($row['hdd_inst_date']) . "</td>";
             echo "<td>" . h($row['backup']) . "</td>";
+=======
+            echo "<td>" . h($row['dvr_vendor']) . "</td>";
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             echo "<td>" . h($row['remarks']) . "</td>";
             echo "</tr>";
         }
@@ -567,6 +631,10 @@ if (isset($_GET['print_summary'])) {
         body { font-family: 'Inter', system-ui, sans-serif; background: #f8fafc; margin: 20px; font-size: 13.5px; color: #334155; }
         .card { background: #fff; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 20px; border: 1px solid #e2e8f0; }
         
+<<<<<<< HEAD
+=======
+        /* Modern Smart Buttons */
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         .btn { display: inline-flex; align-items: center; justify-content: center; padding: 9px 18px; border-radius: 8px; border: 1px solid transparent; cursor: pointer; color: #fff; text-decoration: none; font-size: 13px; font-weight: 600; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); gap: 6px; margin: 2px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04); }
         .btn:hover { transform: translateY(-2px) scale(1.01); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.06), 0 10px 20px rgba(0, 0, 0, 0.08); filter: brightness(1.05); }
         .btn:active { transform: translateY(0) scale(0.98); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04); }
@@ -584,7 +652,11 @@ if (isset($_GET['print_summary'])) {
         input:focus, select:focus, textarea:focus { border-color: var(--primary); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         
         table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; margin-top: 10px; }
+<<<<<<< HEAD
         th, td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: middle; }
+=======
+        th, td { padding: 12px 15px; border-bottom: 1px solid #f1f5f9; text-align: left; vertical-align: top; }
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         th { background: #f8fafc; font-weight: 700; color: #64748b; text-transform: uppercase; font-size: 11px; position: sticky; top: 0; z-index: 1; }
         tr:hover td { background: #f9fbff; }
         .focus-row { background: #fffbeb !important; outline: 2px solid #fcd34d; }
@@ -593,6 +665,10 @@ if (isset($_GET['print_summary'])) {
         .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); backdrop-filter: blur(4px); overflow-y: auto; }
         .modal-content { background: #fff; margin: 40px auto; padding: 25px; border-radius: 15px; width: 85%; max-width: 800px; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1); }
 
+<<<<<<< HEAD
+=======
+        /* Print/PDF specific CSS */
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         @media print {
             body { background: #fff; margin: 0; padding: 0; }
             .no-print, nav, .card:not(.print-container), form, #detailsModal { display: none !important; }
@@ -648,6 +724,7 @@ if (isset($_GET['print_summary'])) {
                     <button type="button" id="btn_fetch_atm" class="btn btn-blue" style="padding: 0 15px; margin: 0; white-space: nowrap;">Fetch</button>
                 </div>
             </div>
+<<<<<<< HEAD
             
             <div><label class="label">Number of ATM</label><input type="number" name="number_of_atm" value="<?= h($editData['number_of_atm'] ?? '') ?>"></div>
             <div><label class="label">Other ATM ID</label><input type="text" name="other_atm_id" value="<?= h($editData['other_atm_id'] ?? '') ?>" placeholder="e.g. IBBL123, IBCR456"></div>
@@ -657,6 +734,12 @@ if (isset($_GET['print_summary'])) {
             <div><label class="label">Branch Name</label><input type="text" name="branch_name" id="f_branch_name" value="<?= h($editData['branch_name'] ?? '') ?>"></div>
             
             <div><label class="label">Branch Code</label><input type="text" id="f_br_code" name="br_code" value="<?= h($editData['br_code'] ?? '') ?>"></div>
+=======
+            <div><label class="label">Booth Name</label><input type="text" name="atm_name" id="f_atm_name" value="<?= h($editData['atm_name'] ?? '') ?>"></div>
+            <div><label class="label">Zone</label><input type="text" name="zone_name" id="f_zone_name" value="<?= h($editData['zone_name'] ?? '') ?>"></div>
+            <div><label class="label">Branch Name</label><input type="text" name="branch_name" id="f_branch_name" value="<?= h($editData['branch_name'] ?? '') ?>"></div>
+            <div><label class="label">Branch Code</label><input type="text" name="br_code" value="<?= h($editData['br_code'] ?? '') ?>"></div>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         </div>
 
         <h4 style="margin: 20px 0 10px; color: var(--primary); border-bottom: 2px solid #f1f5f9; padding-bottom: 5px; font-weight: 600;">Network Configuration</h4>
@@ -758,10 +841,14 @@ if (isset($_GET['print_summary'])) {
 <div class="card no-print">
     <form method="GET">
         <div class="form-grid" style="align-items: flex-end;">
+<<<<<<< HEAD
             <div>
                 <label class="label">Quick Search</label>
                 <input type="text" name="search" value="<?= h($search) ?>" placeholder="ATM ID, Other ID, Booth, IP...">
             </div>
+=======
+            <div><label class="label">Quick Search</label><input type="text" name="search" value="<?= h($search) ?>" placeholder="ATM ID, booth, IP..."></div>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             <div><label class="label">Zone</label>
                 <select name="zone_name">
                     <option value="">All Zones</option>
@@ -802,8 +889,11 @@ if (isset($_GET['print_summary'])) {
                         <th>SL</th>
                         <th>Branch</th>
                         <th>ATM ID</th>
+<<<<<<< HEAD
                         <th>Other ATM ID</th>
                         <th>Number of ATM</th>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                         <th>Booth Name</th>
                         <th>Status</th>
                         <th>Network</th>
@@ -829,9 +919,12 @@ if (isset($_GET['print_summary'])) {
                         <td><?= $sl++ ?></td>
                         <td><?= h($row['branch_name']) ?></td>
                         <td style="font-weight:bold; color:var(--primary);"><?= h($row['atm_id']) ?></td>
+<<<<<<< HEAD
                         <td style="font-size: 11px; color: var(--secondary);"><?= h($row['other_atm_id'] ?: '-') ?></td>
                         <!-- MISSING DATA FIXED HERE -->
                         <td style="text-align:center; font-weight:bold;"><?= h($row['number_of_atm'] ?: '-') ?></td>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                         <td><?= h($row['atm_name']) ?></td>
                         <td><span class="status-badge" style="background:<?= $isOffline?'#fee2e2;color:#b91c1c':'#dcfce7;color:#166534' ?>"><?= h($row['status']?:'Blank') ?></span></td>
                         <td><?= h($row['network']) ?></td>
@@ -856,8 +949,12 @@ if (isset($_GET['print_summary'])) {
                         endwhile; 
                     else: 
                     ?>
+<<<<<<< HEAD
                     <!-- COLSPAN UPDATED TO 10 -->
                     <tr><td colspan="10" style="text-align: center; color: var(--secondary); padding: 30px;">No devices found matching your filters.</td></tr>
+=======
+                    <tr><td colspan="8" style="text-align: center; color: var(--secondary); padding: 30px;">No devices found matching your filters.</td></tr>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     <?php endif; ?>
                 </tbody>
             </table>
@@ -932,7 +1029,10 @@ if (btnFetchAtm && atmIdField) {
                     document.getElementById('f_atm_name').value = data.atm_name || '';
                     document.getElementById('f_zone_name').value = data.zone_name || '';
                     document.getElementById('f_branch_name').value = data.branch_name || '';
+<<<<<<< HEAD
                     document.getElementById('f_br_code').value = data.br_code || '';
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     document.getElementById('f_m_ip').value = data.monitoring_ip || '';
                     document.getElementById('f_ip_address').value = data.internal_ip || '';
                     document.getElementById('f_subnet').value = data.subnet_mask || '';

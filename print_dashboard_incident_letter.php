@@ -47,7 +47,13 @@ $sql = "
         m.ups_vendor AS master_ups_vendor,
         pm.responsible_vendor_type,
         av.vendor_name AS atm_vendor_name,
+<<<<<<< HEAD
         uv.vendor_name AS ups_vendor_name
+=======
+        av.vendor_mobile AS atm_vendor_mobile,
+        uv.vendor_name AS ups_vendor_name,
+        uv.vendor_mobile AS ups_vendor_mobile
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     FROM atm_update a
     LEFT JOIN atm_master m ON a.atm_id = m.atm_id
     LEFT JOIN vendor_master av ON m.atm_vendor_id = av.id
@@ -73,11 +79,18 @@ if (!$row) {
 }
 
 /* ===============================
+<<<<<<< HEAD
    FINAL RESPONSIBLE VENDOR LOGIC
 ================================ */
 $savedResponsibleVendor = trim((string)($row['responsible_vendor_name'] ?? ''));
 $responsibleVendorType  = strtoupper(trim((string)($row['responsible_vendor_type'] ?? '')));
 $problemText            = strtoupper(trim((string)($row['problem'] ?? '')));
+=======
+   FINAL RESPONSIBLE VENDOR
+================================ */
+$responsibleVendorType = strtoupper(trim((string)($row['responsible_vendor_type'] ?? '')));
+$problemText = strtoupper(trim((string)($row['problem'] ?? '')));
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 
 if ($responsibleVendorType === '' && strpos($problemText, 'UPS') !== false) {
     $responsibleVendorType = 'UPS';
@@ -88,6 +101,7 @@ if ($responsibleVendorType === 'UPS') {
     $subjectServiceType = 'UPS';
 } elseif ($responsibleVendorType === 'CRM' || stripos((string)($row['atm_id'] ?? ''), 'IBCR') === 0) {
     $subjectServiceType = 'CRM';
+<<<<<<< HEAD
 } elseif ($responsibleVendorType !== '') {
     $subjectServiceType = $responsibleVendorType;
 }
@@ -155,6 +169,44 @@ if ($responsibleVendor !== '') {
         
         if (!empty($mobilesArray)) {
             $vendorMobile = implode(', ', array_unique(array_filter($mobilesArray)));
+=======
+}
+
+$responsibleVendor = '';
+$vendorMobile = '';
+
+if ($responsibleVendorType === 'UPS') {
+    $responsibleVendor = trim((string)($row['ups_vendor_name'] ?? ''));
+    $vendorMobile = trim((string)($row['ups_vendor_mobile'] ?? ''));
+    if ($responsibleVendor === '') {
+        $responsibleVendor = trim((string)($row['master_ups_vendor'] ?? ''));
+    }
+} else {
+    $responsibleVendor = trim((string)($row['atm_vendor_name'] ?? ''));
+    $vendorMobile = trim((string)($row['atm_vendor_mobile'] ?? ''));
+    if ($responsibleVendor === '') {
+        $responsibleVendor = trim((string)($row['master_atm_vendor'] ?? ''));
+    }
+}
+
+if ($responsibleVendor === '') {
+    $responsibleVendor = trim((string)($row['responsible_vendor_name'] ?? ''));
+}
+
+if ($responsibleVendor !== '') {
+    $stmtMobile = $conn->prepare("SELECT vm.vendor_name, vc.contact_value AS vendor_contact_mobile FROM vendor_master vm LEFT JOIN vendor_contacts vc ON vc.vendor_id = vm.id AND vc.contact_type = 'mobile' WHERE TRIM(vm.vendor_name) = ? ORDER BY vc.id DESC LIMIT 1");
+    if ($stmtMobile) {
+        $stmtMobile->bind_param("s", $responsibleVendor);
+        $stmtMobile->execute();
+        $mobileRow = $stmtMobile->get_result()->fetch_assoc();
+        $stmtMobile->close();
+        if (!empty($mobileRow['vendor_name'])) {
+            $responsibleVendor = trim((string)$mobileRow['vendor_name']);
+        }
+        $vendorContactMobile = trim((string)($mobileRow['vendor_contact_mobile'] ?? ''));
+        if ($vendorContactMobile !== '') {
+            $vendorMobile = $vendorContactMobile;
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         }
     }
 }
@@ -225,7 +277,12 @@ if ($contactRow) {
     }
 }
 
+<<<<<<< HEAD
 $atmmdContactText = "Hotline From Mobile: 09611216259\n\n";
+=======
+// Added \n after Mobile numbers to break the line
+$atmmdContactText = "Hotline From Mobile: 09611216259, From IP: 777-6\n\n";
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $groupNo = (int)($row['group_no'] ?? 0);
 if ($groupNo > 0) {
     $stmtGroup = $conn->prepare("SELECT group_leader_name, group_members FROM group_details WHERE group_no = ? LIMIT 1");
@@ -246,6 +303,10 @@ if ($groupNo > 0) {
             $groupInfo[] = 'Group Members: ' . $groupMembers;
         }
         
+<<<<<<< HEAD
+=======
+        // Added \n before Group information to move it to a new line
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         if (!empty($groupInfo)) {
             $atmmdContactText .= "\n" . implode(', ', $groupInfo);
         }
@@ -358,11 +419,19 @@ $today = date('d/m/Y');
 <div class="paper">
     <div class="meta">
         <strong>Attention:</strong> <?php echo h($vendorMobile ?: '-'); ?>, <?php echo h($responsibleVendor ?: '-'); ?><br>
+<<<<<<< HEAD
     </div>
 
     <div class="subject">
         Subject: Request for Immediate Resolution of <?= h($subjectServiceType) ?> Related Incident at ATM ID <?= h($row['atm_id']) ?> (<?= h($row['atm_name']) ?>).
     </div>
+=======
+            </div>
+
+    <div class="subject">
+    Subject: Request for Immediate Resolution of <?= h($subjectServiceType) ?> Related Incident at ATM ID <?= h($row['atm_id']) ?> (<?= h($row['atm_name']) ?>).
+</div>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 
     <div class="body-text">
         Please find below the details of the incident for necessary information and taking required steps.

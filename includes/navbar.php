@@ -1,5 +1,6 @@
 <?php
 $current_page = basename($_SERVER['PHP_SELF']);
+<<<<<<< HEAD
 
 // নিরাপদভাবে h() ফাংশন ডিফাইন করা হয়েছে যেন অন্য ফাইলের সাথে কনফ্লিক্ট না করে
 if (!function_exists('h')) {
@@ -20,6 +21,8 @@ try {
 } catch (Exception $e) {
     // টেবিল না থাকলে এরর এড়ানোর জন্য সাইলেন্ট রাখা হয়েছে
 }
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 ?>
 <style>
 /* Global Navbar Styles */
@@ -175,17 +178,28 @@ try {
         </li>
 
         <li>
+<<<<<<< HEAD
             <a href="#" class="<?= in_array($current_page, ['penalty_summary_report.php', 'manage_vendor_penalty_rules.php', 'manage_vendor_amc_rates.php', 'penalty_vendor_summary.php']) ? 'active' : '' ?>">Penalty Mgmt &#9662;</a>
+=======
+            <a href="#" class="<?= in_array($current_page, ['penalty_summary_report.php', 'manage_vendor_penalty_rules.php', 'manage_vendor_amc_rates.php']) ? 'active' : '' ?>">Penalty Mgmt &#9662;</a>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             <ul class="dropdown-menu">
                 <li><a href="penalty_summary_report.php">Penalty Summary Report</a></li>
                 <li><a href="manage_vendor_penalty_rules.php">Vendor Penalty Rules</a></li>
                 <li><a href="manage_vendor_amc_rates.php">Vendor AMC Rates</a></li>
+<<<<<<< HEAD
                 <li><a href="penalty_vendor_summary.php">Vendor Penalty Summary</a></li>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             </ul>
         </li>
 
         <li>
+<<<<<<< HEAD
             <a href="#" class="<?= in_array($current_page, ['cctv_dashboard.php', 'cctv_list.php', 'cctv_set_requisition_list.php', 'cctv_spare_requisition_list.php', 'cctv_item_master.php', 'cctv_location_master.php', 'cctv_vendor_master.php', 'cctv_procurement_workflow.php']) ? 'active' : '' ?>">CCTV System &#9662;</a>
+=======
+            <a href="#" class="<?= in_array($current_page, ['cctv_dashboard.php', 'cctv_list.php', 'cctv_set_requisition_list.php', 'cctv_spare_requisition_list.php', 'cctv_item_master.php', 'cctv_location_master.php', 'cctv_vendor_master.php']) ? 'active' : '' ?>">CCTV System &#9662;</a>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             <ul class="dropdown-menu">
                 <li><a href="cctv_dashboard.php">CCTV Analytics Dashboard</a></li>
                 <li><a href="cctv_list.php">CCTV Master List</a></li>
@@ -194,6 +208,7 @@ try {
                 <li><a href="cctv_item_master.php">CCTV Item Master</a></li>
                 <li><a href="cctv_location_master.php">Location Master</a></li>
                 <li><a href="cctv_vendor_master.php">Vendor Master</a></li>
+<<<<<<< HEAD
                 <li><a href="cctv_procurement_workflow.php">Hard Disk Procurement Workflow</a></li>
             </ul>
         </li>
@@ -211,16 +226,25 @@ try {
                     echo '<li><a href="#">No links available</a></li>';
                 }
                 ?>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             </ul>
         </li>
 
         <li>
+<<<<<<< HEAD
             <a href="#" class="<?= in_array($current_page, ['manage_users.php', 'manage_roles.php', 'manage_audit_logs.php', 'manage_links.php']) ? 'active' : '' ?>">Settings &#9662;</a>
+=======
+            <a href="#" class="<?= in_array($current_page, ['manage_users.php', 'manage_roles.php', 'manage_audit_logs.php']) ? 'active' : '' ?>">Settings &#9662;</a>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             <ul class="dropdown-menu">
                 <li><a href="manage_users.php">Manage Users</a></li>
                 <li><a href="manage_roles.php">Manage Roles & Permissions</a></li>
                 <li><a href="manage_audit_logs.php">System Audit Logs</a></li>
+<<<<<<< HEAD
                 <li><a href="manage_links.php">Manage Important Links</a></li>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             </ul>
         </li>
     </ul>
@@ -229,4 +253,8 @@ try {
         <a href="change_password.php" style="background: #0d6efd; margin-right: 5px;">Change Password</a>
         <a href="logout.php">Logout</a>
     </div>
+<<<<<<< HEAD
 </nav>
+=======
+</nav>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1

@@ -172,7 +172,10 @@ echo '<thead>
             <th style="background-color:#f2f2f2;">Zone</th>
             <th style="background-color:#f2f2f2;">Branch</th>
             <th style="background-color:#f2f2f2;">ATM Vendor</th>
+<<<<<<< HEAD
             <th style="background-color:#f2f2f2;">UPS Vendor Name</th>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             <th style="background-color:#f2f2f2;">Group</th>
             <th style="background-color:#f2f2f2;">Monitoring IP</th>
             <th style="background-color:#f2f2f2;">Internal IP</th>
@@ -201,7 +204,10 @@ while ($row = $result->fetch_assoc()) {
     echo '<td>' . htmlspecialchars($row['zone_name']) . '</td>';
     echo '<td>' . htmlspecialchars($row['branch_name']) . '</td>';
     echo '<td>' . htmlspecialchars($row['atm_vendor_name'] ?? $row['atm_vendor'] ?? '') . '</td>';
+<<<<<<< HEAD
     echo '<td>' . htmlspecialchars($row['ups_vendor_name'] ?? $row['ups_vendor'] ?? '') . '</td>';
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     echo '<td>' . htmlspecialchars($row['group_no']) . '</td>';
     echo '<td>' . htmlspecialchars($row['monitoring_ip']) . '</td>';
     echo '<td>' . htmlspecialchars($row['internal_ip']) . '</td>';
@@ -224,4 +230,7 @@ while ($row = $result->fetch_assoc()) {
 
 echo '</tbody></table>';
 exit;
+<<<<<<< HEAD
 ?>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1

@@ -133,10 +133,17 @@ if (isset($_GET['forwarding']) && $_GET['forwarding'] === 'vendor' && isset($_GE
         Mobile: <?= h($r['mobile'] ?? '-') ?><br>
         Vendor: <strong><?= h($r['assigned_vendor_name'] ?? '-') ?></strong></p>
         
+<<<<<<< HEAD
         <p class="subject">Subject: Request to solve ATM Booth CCTV related issues of <?= h($r['booth_name'] ?? '-') ?></p>
         
         <p>Dear Sir,</p>
         <p>You are requested to arrange necessary service/ repair/replacement of neeful CCTV spare item(s) at the mentioned ATM Booth on urgent basis as per approved rate and specifications (In case of DVR and Camera damage, Hikvision IDS-7104HQHI DVR & Hikvision DS-2CE76DOT-ITMF camera is preferred).</p>
+=======
+        <p class="subject">Subject: Request for installation/replacement of CCTV spare item(s) against Requisition No. <?= h($r['requisition_no'] ?? '-') ?></p>
+        
+        <p>Dear Sir,</p>
+        <p>You are requested to arrange necessary service/ repair/replacement of neeful CCTV spare item(s) at the mentioned ATM Booth on urgent basis as per approved rate and specifications.</p>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         
         <div style="margin: 15px 0; line-height: 1.6;">
             <strong>ATM ID:</strong> <?= h($r['atm_id'] ?? '-') ?><br>
@@ -158,7 +165,11 @@ if (isset($_GET['forwarding']) && $_GET['forwarding'] === 'vendor' && isset($_GE
         
         <p>Please reply with technician details.</p>
         <br><br><br>
+<<<<<<< HEAD
         <p>___________________________<br><strong>Md. Mahbub Al Hassan</strong><br>SVP & Head of ATMMD</strong><br>Islami Bank Bangladesh PLC.</p>
+=======
+        <p>___________________________<br><strong>CCTV & UPS Management Dept., ATMMD</strong><br>Islami Bank Bangladesh PLC.</p>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     </div>
     
     <div class="footer-box"><strong>ATM Management Division, DBW, HO</strong><br>75, Dilkusha C/A, Dhaka-1000, Bangladesh; email: group_atmmd@islamibankbd.com</div>

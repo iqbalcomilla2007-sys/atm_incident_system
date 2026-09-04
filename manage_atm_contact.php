@@ -20,6 +20,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['save_contact'])) {
     $branch_code      = trim($_POST['branch_code'] ?? '');
     $branch_name      = trim($_POST['branch_name'] ?? '');
 
+<<<<<<< HEAD
+=======
+    // NOTE: branch_name এবং branch_code এখন dropdown থেকে সরাসরি (JS দিয়ে) আসে,
+    // তাই এখানে আর branch_name দিয়ে branch_code অনুমান/override করার দরকার নেই।
+    // (আগে এখানে LIMIT 1 দিয়ে auto-fetch করা হতো, যেটা একই branch_name এর একাধিক
+    // ভিন্ন branch_code থাকলে ভুল code বসিয়ে দিত এবং false duplicate error দিতো।)
+
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     $custodian1_name  = trim($_POST['custodian1_name'] ?? '');
     $custodian1_mobile = trim($_POST['custodian1_mobile'] ?? '');
     $custodian2_name  = trim($_POST['custodian2_name'] ?? '');
@@ -110,8 +118,13 @@ if ($search !== '') {
 $listSql .= " ORDER BY id DESC";
 $listRes = $conn->query($listSql);
 
+<<<<<<< HEAD
 // --- Branch dropdown data (প্রথমে branch_name অনুযায়ী সর্ট করা হয়েছে) ---
 $branchMapRes = $conn->query("SELECT id, zone_name, branch_name, branch_code FROM zone_branch_map ORDER BY branch_name ASC, zone_name ASC");
+=======
+// --- Branch dropdown data (zone_branch_map থেকে সব branch, নতুন) ---
+$branchMapRes = $conn->query("SELECT id, zone_name, branch_name, branch_code FROM zone_branch_map ORDER BY zone_name ASC, branch_name ASC");
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $branchMapRows = [];
 if ($branchMapRes) {
     while ($bm = $branchMapRes->fetch_assoc()) {
@@ -183,7 +196,11 @@ if ($branchMapRes) {
                             data-name="<?= h($bm['branch_name']) ?>"
                             data-code="<?= h($bm['branch_code']) ?>"
                             <?= $isSelected ? 'selected' : '' ?>>
+<<<<<<< HEAD
                             <?= h($bm['branch_name']) ?> (Zone: <?= h($bm['zone_name']) ?>) [<?= h($bm['branch_code']) ?>]
+=======
+                            <?= h($bm['zone_name']) ?> - <?= h($bm['branch_name']) ?> (<?= h($bm['branch_code']) ?>)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                         </option>
                     <?php endforeach; ?>
                     <?php if ($editId > 0 && !$matchedExisting && $currentName !== ''): ?>
@@ -252,6 +269,10 @@ if ($branchMapRes) {
                             
                             <td>
                                 <?php 
+<<<<<<< HEAD
+=======
+                                    // Handles fallback safely for both column name variations
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                                     $modTime = trim($row['last_modified_time'] ?? $row['created_at'] ?? '');
                                     if ($modTime !== '' && $modTime !== '0000-00-00 00:00:00') {
                                         echo h(date('d/m/Y h:i A', strtotime($modTime)));
@@ -289,6 +310,10 @@ if ($branchMapRes) {
 </div>
 
 <script>
+<<<<<<< HEAD
+=======
+// Branch select করলে branch_name ও branch_code auto fill হবে (hidden fields এর মাধ্যমে ফর্মে যাবে)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 document.getElementById('branch_select').addEventListener('change', function () {
     const opt = this.options[this.selectedIndex];
     const name = opt.getAttribute('data-name') || '';
@@ -298,6 +323,10 @@ document.getElementById('branch_select').addEventListener('change', function () 
     document.getElementById('branch_code_display').value = code;
 });
 
+<<<<<<< HEAD
+=======
+// Submit করার আগে check করুন যে branch select করা আছে কিনা
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 document.getElementById('contactForm').addEventListener('submit', function (e) {
     const nameVal = document.getElementById('branch_name_hidden').value.trim();
     if (nameVal === '') {

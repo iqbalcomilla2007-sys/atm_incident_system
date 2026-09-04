@@ -25,7 +25,11 @@ function tableExists($conn, $table) {
     return ($res && $res->num_rows > 0);
 }
 
+<<<<<<< HEAD
 /* Penalty count join */
+=======
+/* Penalty count join (নতুন) */
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $hasPenaltyReports = tableExists($conn, 'penalty_reports');
 $penaltyCountSelect = $hasPenaltyReports ? "COALESCE(pc.penalty_count, 0) AS penalty_count" : "0 AS penalty_count";
 $penaltyJoinSql = $hasPenaltyReports
@@ -256,6 +260,7 @@ while ($row = $result->fetch_assoc()) {
                                 $responsibleVendor = $row['ups_vendor'] ?? '';
                             }
                             $penaltyCount = (int)($row['penalty_count'] ?? 0);
+<<<<<<< HEAD
 
                             // Live Down Time Calculation
                             $liveDownTime = h($row['down_time']); // fallback
@@ -277,6 +282,8 @@ while ($row = $result->fetch_assoc()) {
                                     // if date format is invalid, keep fallback
                                 }
                             }
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                             ?>
                             <tr>
                                 <td><?php echo $sl++; ?></td>
@@ -284,7 +291,11 @@ while ($row = $result->fetch_assoc()) {
                                 <td><?php echo h($row['atm_name']); ?></td>
                                 <td><?php echo h($row['zone_name']); ?></td>
                                 <td><?php echo h($row['problem']); ?></td>
+<<<<<<< HEAD
                                 <td><?php echo $liveDownTime; ?></td> <!-- Show Live Calculated Down Time -->
+=======
+                                <td><?php echo h($row['down_time']); ?></td>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                                 <td><?php echo h($responsibleVendor ?: '-'); ?></td>
                                 <td><?php echo !empty($row['created_at']) ? date('d-M-Y h:i A', strtotime($row['created_at'])) : ''; ?></td>
                                 <td><?php echo h($row['modified_by_username'] ?? '-'); ?></td>

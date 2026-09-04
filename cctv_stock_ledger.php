@@ -1,7 +1,11 @@
+<<<<<<< HEAD
 <?php 
 require_once __DIR__ . '/init.php'; 
 // অথবা যদি সরাসরি db.php ব্যবহার করতে চান, তবে: include 'db.php';
 ?>
+=======
+<?php include('db_connection.php'); ?>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 <!DOCTYPE html>
 <html>
 <head>
@@ -37,6 +41,7 @@ require_once __DIR__ . '/init.php';
                             JOIN cctv_item_master i ON s.item_id = i.id
                             ORDER BY t.id DESC";
                     $res = mysqli_query($conn, $sql);
+<<<<<<< HEAD
                     if ($res && mysqli_num_rows($res) > 0) {
                         while($row = mysqli_fetch_assoc($res)) {
                             $cls = ($row['stock_type']=='NEW_UNUSED') ? 'badge-success' : 'badge-warning';
@@ -53,6 +58,20 @@ require_once __DIR__ . '/init.php';
                         }
                     } else {
                         echo "<tr><td colspan='7' class='text-center'>No stock transactions found.</td></tr>";
+=======
+                    while($row = mysqli_fetch_assoc($res)) {
+                        $cls = ($row['stock_type']=='NEW_UNUSED') ? 'badge-success' : 'badge-warning';
+                        $lbl = ($row['stock_type']=='NEW_UNUSED') ? 'New Stock' : 'Old Repaired';
+                        echo "<tr>
+                                <td>".$row['transaction_date']."</td>
+                                <td>".$row['item_name']."</td>
+                                <td><span class='badge $cls'>$lbl</span></td>
+                                <td>".$row['brand']." / ".$row['model']."</td>
+                                <td>".$row['transaction_type']."</td>
+                                <td>".$row['qty']."</td>
+                                <td>".$row['letter_no']."</td>
+                              </tr>";
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     }
                     ?>
                 </tbody>

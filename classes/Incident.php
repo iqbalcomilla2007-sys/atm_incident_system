@@ -84,6 +84,7 @@ class Incident {
         return trim((string)($row['responsible_vendor_type'] ?? ''));
     }
 
+<<<<<<< HEAD
     // UPDATED: Now checks both ATM ID and Responsible Vendor
     public function hasOpenIncident($atmId, $responsibleVendor) {
         $atmId = strtoupper(trim($atmId));
@@ -93,11 +94,23 @@ class Incident {
             SELECT incident_id
             FROM atm_update
             WHERE atm_id = ? AND responsible_vendor_name = ? AND incident_status = 'Open'
+=======
+    public function hasOpenIncident($atmId) {
+        $atmId = strtoupper(trim($atmId));
+        $stmt = $this->conn->prepare("
+            SELECT incident_id
+            FROM atm_update
+            WHERE atm_id = ? AND incident_status = 'Open'
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             LIMIT 1
         ");
         if (!$stmt) return false;
 
+<<<<<<< HEAD
         $stmt->bind_param("ss", $atmId, $responsibleVendor);
+=======
+        $stmt->bind_param("s", $atmId);
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         $stmt->execute();
         $res = $stmt->get_result();
         $hasOpen = ($res->num_rows > 0);
@@ -115,7 +128,15 @@ class Incident {
             return ["success" => false, "error" => "ATM ID and Problem are required."];
         }
 
+<<<<<<< HEAD
         // Get trusted ATM data FIRST
+=======
+        if ($this->hasOpenIncident($atmId)) {
+            return ["success" => false, "error" => "duplicate", "atm_id" => $atmId];
+        }
+
+        // Get trusted ATM data
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         $stmt = $this->conn->prepare("
             SELECT 
                 a.atm_id,
@@ -142,7 +163,11 @@ class Incident {
             return ["success" => false, "error" => "Invalid ATM ID."];
         }
 
+<<<<<<< HEAD
         // Calculate responsible vendor BEFORE duplicate checking
+=======
+        // Priority to user input from frontend, otherwise auto-calculate
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         $responsibleVendor = trim($data['responsible_vendor_name'] ?? '');
         
         if ($responsibleVendor === '') {
@@ -163,11 +188,14 @@ class Incident {
             }
         }
 
+<<<<<<< HEAD
         // NOW check for duplicates using both ATM ID and calculated Vendor Name
         if ($this->hasOpenIncident($atmId, $responsibleVendor)) {
             return ["success" => false, "error" => "duplicate", "atm_id" => $atmId, "vendor" => $responsibleVendor];
         }
 
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         Auth::startSession();
         $lastModifiedBy = (int)($_SESSION['user_id'] ?? 0);
 
@@ -210,7 +238,11 @@ class Incident {
         }
         $stmt->close();
 
+<<<<<<< HEAD
         AuditLog::log("CREATE_INCIDENT", "Created incident for ATM ID: " . $atm['atm_id'] . ", Problem: " . $problem . ", Vendor: " . $responsibleVendor);
+=======
+        AuditLog::log("CREATE_INCIDENT", "Created incident for ATM ID: " . $atm['atm_id'] . ", Problem: " . $problem);
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         return ["success" => true];
     }
 

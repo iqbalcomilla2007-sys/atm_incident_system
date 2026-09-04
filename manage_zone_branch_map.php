@@ -77,6 +77,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             // ========================================================
             // Synchronize with zone_master
+<<<<<<< HEAD
+=======
+            // Ensure the new zone exists in zone_master table
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             // ========================================================
             $checkZone = $conn->prepare("SELECT id FROM zone_master WHERE zone_name = ?");
             if ($checkZone) {
@@ -84,6 +88,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $checkZone->execute();
                 $checkZone->store_result();
                 
+<<<<<<< HEAD
+=======
+                // If zone doesn't exist, insert it automatically (Removed 'status' column)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 if ($checkZone->num_rows == 0) {
                     $checkZone->close();
                     $insZone = $conn->prepare("INSERT INTO zone_master (zone_name) VALUES (?)");
@@ -97,6 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
+<<<<<<< HEAD
             // ========================================================
             // Fetch related Group No for the new Zone
             // ========================================================
@@ -113,6 +122,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtGrp->close();
             }
 
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             if ($id > 0) {
                 // Fetch old values to update related tables
                 $oldZone = '';
@@ -122,15 +133,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $oldZone = $row['zone_name'];
                     $oldBranch = $row['branch_name'];
                 }
+<<<<<<< HEAD
                 
                 $oldBranchTrimmed = trim($oldBranch);
 
                 // UPDATE zone_branch_map
                 $stmt = $conn->prepare("UPDATE zone_branch_map SET zone_name=?, branch_name=?, branch_code=?, status=? WHERE id=?");
+=======
+
+                // UPDATE
+                $stmt = $conn->prepare("
+                    UPDATE zone_branch_map
+                    SET zone_name=?, branch_name=?, branch_code=?, status=?
+                    WHERE id=?
+                ");
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 $stmt->bind_param("sssii", $zone_name, $branch_name, $branch_code, $status, $id);
                 $stmt->execute();
                 $stmt->close();
 
+<<<<<<< HEAD
                 // 1. Synchronize with atm_master (with group_no & TRIM)
                 if ($new_group_no !== null) {
                     $stmtAtm = $conn->prepare("UPDATE atm_master SET branch_code = ?, zone_name = ?, branch_name = ?, group_no = ? WHERE TRIM(branch_name) = ?");
@@ -166,12 +188,41 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $stmtContact = $conn->prepare("UPDATE atm_contact SET branch_code = ?, branch_name = ? WHERE TRIM($contactKey) = ?");
                 if ($stmtContact) {
                     $stmtContact->bind_param("sss", $branch_code, $branch_name, $oldBranchTrimmed);
+=======
+                // Synchronize with atm_master
+                $stmtAtm = $conn->prepare("
+                    UPDATE atm_master
+                    SET branch_code = ?, zone_name = ?, branch_name = ?
+                    WHERE zone_name = ? AND branch_name = ?
+                ");
+                if ($stmtAtm) {
+                    $stmtAtm->bind_param("sssss", $branch_code, $zone_name, $branch_name, $oldZone, $oldBranch);
+                    $stmtAtm->execute();
+                    $stmtAtm->close();
+                }
+
+                // Synchronize with atm_contact (using soft match)
+                $atmObj = new AtmMaster();
+                $contactKey = $atmObj->branchKeySql('branch_name');
+                $cleanParam = $atmObj->branchKeySql('?');
+                $stmtContact = $conn->prepare("
+                    UPDATE atm_contact
+                    SET branch_code = ?, branch_name = ?
+                    WHERE $contactKey = $cleanParam
+                ");
+                if ($stmtContact) {
+                    $stmtContact->bind_param("sss", $branch_code, $branch_name, $oldBranch);
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     $stmtContact->execute();
                     $stmtContact->close();
                 }
 
                 AuditLog::log("UPDATE_ZONE_BRANCH_MAP", "Updated branch mapping: " . $branch_name . " (Code: " . $branch_code . ") under Zone: " . $zone_name);
                 
+<<<<<<< HEAD
+=======
+                // Redirect back to specific row
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 header("Location: manage_zone_branch_map.php?msg=updated{$s_url}#row-{$id}");
                 exit;
 
@@ -183,6 +234,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if ($stmt->execute()) {
                     $newId = $conn->insert_id;
                     $stmt->close();
+<<<<<<< HEAD
                     
                     $branchTrimmed = trim($branch_name);
 
@@ -228,12 +280,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $stmtContact = $conn->prepare("UPDATE atm_contact SET branch_code = ? WHERE TRIM($contactKey) = ?");
                     if ($stmtContact) {
                         $stmtContact->bind_param("ss", $branch_code, $branchTrimmed);
+=======
+
+                    // Synchronize with atm_master
+                    $stmtAtm = $conn->prepare("
+                        UPDATE atm_master
+                        SET branch_code = ?
+                        WHERE zone_name = ? AND branch_name = ?
+                    ");
+                    if ($stmtAtm) {
+                        $stmtAtm->bind_param("sss", $branch_code, $zone_name, $branch_name);
+                        $stmtAtm->execute();
+                        $stmtAtm->close();
+                    }
+
+                    // Synchronize with atm_contact
+                    $atmObj = new AtmMaster();
+                    $contactKey = $atmObj->branchKeySql('branch_name');
+                    $cleanParam = $atmObj->branchKeySql('?');
+                    $stmtContact = $conn->prepare("
+                        UPDATE atm_contact
+                        SET branch_code = ?
+                        WHERE $contactKey = $cleanParam
+                    ");
+                    if ($stmtContact) {
+                        $stmtContact->bind_param("ss", $branch_code, $branch_name);
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                         $stmtContact->execute();
                         $stmtContact->close();
                     }
 
                     AuditLog::log("CREATE_ZONE_BRANCH_MAP", "Added branch mapping: " . $branch_name . " (Code: " . $branch_code . ") under Zone: " . $zone_name);
                     
+<<<<<<< HEAD
+=======
+                    // Redirect to new row
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                     header("Location: manage_zone_branch_map.php?msg=added{$s_url}#row-{$newId}");
                     exit;
                 }

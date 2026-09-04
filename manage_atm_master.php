@@ -59,6 +59,7 @@ if ($resGroup) { while ($r = $resGroup->fetch_assoc()) $groups[] = $r['group_no'
 ----------------------------------- */
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['add_atm']) || isset($_POST['update_atm']))) {
     $result = $atmObj->save($_POST);
+<<<<<<< HEAD
     
     if ($result['success']) {
         $message = $result['msg'];
@@ -103,6 +104,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (isset($_POST['add_atm']) || isset(
             $editId = 0; // reset edit state
         }
         
+=======
+    if ($result['success']) {
+        $message = $result['msg'];
+        if (isset($_POST['update_atm'])) {
+            $editId = 0; // reset edit state
+        }
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     } else {
         $message = "Error: " . $result['error'];
     }
@@ -183,10 +191,13 @@ if ($editId > 0) {
         <div style="display:flex; justify-content:space-between; align-items:center;">
             <span style="font-weight:bold;">Total Records: <?= $totalCount ?></span>
             <div style="display:flex; gap:10px;">
+<<<<<<< HEAD
                 <!-- NEW: Manage Links Button -->
                 <a href="manage_links.php" class="btn btn-info btn-sm" style="font-size: 13px; font-weight: normal; padding: 5px 10px; background: #0ea5e9; color: #fff;" title="Manage Important Links">Manage Links</a>
                 
                 <a href="atm_booth_list.php" class="btn btn-blue btn-sm" style="font-size: 13px; font-weight: normal; padding: 5px 10px;" title="View ATM Booth List">ATM Booth List</a>
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 <a href="zone_branch_summary.php" class="btn btn-secondary btn-sm" style="font-size: 13px; font-weight: normal; padding: 5px 10px;" title="Zone & Branch Summary">Zone/Branch Summary Report</a>
                 <button class="btn btn-dark btn-sm" style="font-size: 13px; font-weight: normal; padding: 5px 10px;" onclick="document.getElementById('vTable').style.display = (document.getElementById('vTable').style.display==='none'?'block':'none')">Toggle Vendor Summary</button>
             </div>

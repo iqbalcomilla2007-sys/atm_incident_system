@@ -3,7 +3,11 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
+<<<<<<< HEAD
 -- Generation Time: Sep 04, 2026 at 03:59 PM
+=======
+-- Generation Time: Jul 11, 2026 at 06:09 PM
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -38,7 +42,11 @@ CREATE TABLE `atm_contact` (
   `ip_phone_no` varchar(20) DEFAULT NULL,
   `manager_name` varchar(100) DEFAULT NULL,
   `manager_mobile` varchar(20) DEFAULT NULL,
+<<<<<<< HEAD
   `last_modified_time` timestamp NOT NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+=======
+  `created_at` timestamp NOT NULL DEFAULT current_timestamp()
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 -- --------------------------------------------------------
@@ -296,6 +304,7 @@ CREATE TABLE `cctv_device_history` (
 -- --------------------------------------------------------
 
 --
+<<<<<<< HEAD
 -- Table structure for table `cctv_hard_disk_procurement`
 --
 
@@ -328,6 +337,8 @@ CREATE TABLE `cctv_hard_disk_procurement` (
 -- --------------------------------------------------------
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- Table structure for table `cctv_installed_devices`
 --
 
@@ -382,8 +393,11 @@ CREATE TABLE `cctv_list` (
   `branch_name` varchar(150) DEFAULT NULL,
   `atm_name` text DEFAULT NULL,
   `atm_id` varchar(50) DEFAULT NULL,
+<<<<<<< HEAD
   `number_of_atm` int(11) DEFAULT NULL,
   `other_atm_id` varchar(255) DEFAULT NULL,
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
   `network` varchar(100) DEFAULT NULL,
   `backup` varchar(100) DEFAULT NULL,
   `dvr_inst_date` date DEFAULT NULL,
@@ -888,6 +902,7 @@ CREATE TABLE `ignored_penalties` (
 -- --------------------------------------------------------
 
 --
+<<<<<<< HEAD
 -- Table structure for table `important_links`
 --
 
@@ -902,6 +917,8 @@ CREATE TABLE `important_links` (
 -- --------------------------------------------------------
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- Table structure for table `incident_penalties`
 --
 
@@ -1287,12 +1304,15 @@ ALTER TABLE `cctv_device_history`
   ADD PRIMARY KEY (`id`);
 
 --
+<<<<<<< HEAD
 -- Indexes for table `cctv_hard_disk_procurement`
 --
 ALTER TABLE `cctv_hard_disk_procurement`
   ADD PRIMARY KEY (`id`);
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- Indexes for table `cctv_installed_devices`
 --
 ALTER TABLE `cctv_installed_devices`
@@ -1502,12 +1522,15 @@ ALTER TABLE `ignored_penalties`
   ADD PRIMARY KEY (`id`);
 
 --
+<<<<<<< HEAD
 -- Indexes for table `important_links`
 --
 ALTER TABLE `important_links`
   ADD PRIMARY KEY (`id`);
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- Indexes for table `incident_penalties`
 --
 ALTER TABLE `incident_penalties`
@@ -1709,12 +1732,15 @@ ALTER TABLE `cctv_device_history`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+<<<<<<< HEAD
 -- AUTO_INCREMENT for table `cctv_hard_disk_procurement`
 --
 ALTER TABLE `cctv_hard_disk_procurement`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- AUTO_INCREMENT for table `cctv_installed_devices`
 --
 ALTER TABLE `cctv_installed_devices`
@@ -1871,12 +1897,15 @@ ALTER TABLE `ignored_penalties`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+<<<<<<< HEAD
 -- AUTO_INCREMENT for table `important_links`
 --
 ALTER TABLE `important_links`
   MODIFY `id` int(11) NOT NULL AUTO_INCREMENT;
 
 --
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 -- AUTO_INCREMENT for table `incident_penalties`
 --
 ALTER TABLE `incident_penalties`

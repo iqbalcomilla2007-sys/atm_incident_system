@@ -11,6 +11,7 @@ $problem   = trim($_POST['problem'] ?? '');
 $down_time = trim($_POST['down_time'] ?? '');
 $responsible_vendor_name = trim($_POST['responsible_vendor_name'] ?? '');
 
+<<<<<<< HEAD
 // ডেটাবেস কানেকশন নেওয়া হচ্ছে
 $conn = Database::getInstance()->getConnection();
 
@@ -37,6 +38,8 @@ if ($stmt_chk) {
 // ========================================================================
 
 // যদি ডুপ্লিকেট না থাকে, তবে নিচের লজিকে ডেটা সেভ হবে
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $incidentObj = new Incident();
 $result = $incidentObj->create([
     'atm_id' => $atm_id,
@@ -49,9 +52,14 @@ if ($result['success']) {
     header("Location: dashboard_ajax_v2.php?saved=1");
     exit;
 } else {
+<<<<<<< HEAD
     // ফলব্যাক হিসেবে যদি ক্লাস থেকে কোনো ডুপ্লিকেট এরর আসে
     if (isset($result['error']) && $result['error'] === 'duplicate') {
         header("Location: index.php?duplicate=1&vendor=" . urlencode($responsible_vendor_name) . "&atm_id=" . urlencode($atm_id));
+=======
+    if (isset($result['error']) && $result['error'] === 'duplicate') {
+        header("Location: index.php?duplicate=1&atm_id=" . urlencode($result['atm_id']));
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
         exit;
     } else {
         die("Error saving incident: " . ($result['error'] ?? 'Unknown error'));

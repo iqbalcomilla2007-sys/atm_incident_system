@@ -129,6 +129,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } catch (Exception $e) { $conn->rollback(); $error = $e->getMessage(); }
 }
 
+<<<<<<< HEAD
 // Pagination & Filtering Logic
 $historySearch = trim($_GET['history_search'] ?? '');
 $historyType = trim($_GET['history_type'] ?? '');
@@ -140,6 +141,13 @@ $where = [];
 $params = [];
 $types = '';
 
+=======
+$historySearch = trim($_GET['history_search'] ?? '');
+$historyType = trim($_GET['history_type'] ?? '');
+$where = [];
+$params = [];
+$types = '';
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 if ($historySearch !== '') {
     $searchParam = '%' . $historySearch . '%';
     $where[] = "(m.movement_no LIKE ? OR m.old_atm_id LIKE ? OR m.new_atm_id LIKE ? OR m.old_atm_name LIKE ? OR m.old_branch_name LIKE ? OR m.new_atm_name LIKE ? OR m.new_branch_name LIKE ? OR m.reference_no LIKE ? OR m.reason LIKE ? )";
@@ -153,6 +161,7 @@ if ($historyType !== '') {
     $types .= 's';
     $params[] = $historyType;
 }
+<<<<<<< HEAD
 
 $whereClause = !empty($where) ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -174,6 +183,17 @@ $stmt = $conn->prepare($sql);
 $bindTypes = $types . 'ii';
 $bindParams = array_merge($params, [$offset, $limit]);
 $stmt->bind_param($bindTypes, ...$bindParams);
+=======
+$sql = "SELECT m.*, u.username FROM atm_device_movement m LEFT JOIN users u ON m.created_by = u.id";
+if (!empty($where)) {
+    $sql .= ' WHERE ' . implode(' AND ', $where);
+}
+$sql .= " ORDER BY m.id DESC LIMIT 15";
+$stmt = $conn->prepare($sql);
+if ($types !== '') {
+    $stmt->bind_param($types, ...$params);
+}
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 $stmt->execute();
 $history = $stmt->get_result();
 $stmt->close();
@@ -205,10 +225,13 @@ $stmt->close();
     table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 10px; overflow: hidden; }
     th, td { padding: 12px; text-align: left; border-bottom: 1px solid #f1f5f9; }
     th { background: #f8fafc; font-size: 11px; color: #64748b; text-transform: uppercase; }
+<<<<<<< HEAD
     .pagination { display: flex; gap: 5px; margin-top: 15px; align-items: center; justify-content: flex-end; }
     .pagination a, .pagination span { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; text-decoration: none; font-size: 12px; color: #334155; background: #fff; }
     .pagination a:hover { background: #f1f5f9; }
     .pagination .active { background: var(--primary); color: #fff; border-color: var(--primary); }
+=======
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 </style>
 </head>
 <body>
@@ -346,9 +369,13 @@ $stmt->close();
 
 <!-- History -->
 <div class="card">
+<<<<<<< HEAD
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
         <h3 style="margin:0;">Recent Logs (Total: <?= $totalRecords ?>)</h3>
     </div>
+=======
+    <h3 style="margin:0 0 15px 0;">Recent Logs</h3>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     <form method="get" action="atm_device_movement.php" style="display:flex; flex-wrap:wrap; gap:12px; align-items:flex-end; margin-bottom:18px;">
         <div style="flex:1 1 320px; min-width:220px;">
             <label style="display:block; margin-bottom:6px; font-weight:700; font-size:11px; color:#475569; text-transform:uppercase;">Search</label>
@@ -373,11 +400,15 @@ $stmt->close();
         <table>
             <thead><tr><th>SL</th><th>No</th><th>Type</th><th>Old ID</th><th>New ID</th><th>Old Booth</th><th>New Booth</th><th>Date</th><th>Actions</th></tr></thead>
             <tbody>
+<<<<<<< HEAD
                 <?php 
                 $sl = $offset + 1; 
                 if ($history->num_rows > 0):
                     while($r = $history->fetch_assoc()): 
                 ?>
+=======
+                <?php $sl=1; while($r = $history->fetch_assoc()): ?>
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
                 <tr>
                     <td><?=$sl++?></td>
                     <td><?=h($r['movement_no'])?></td>
@@ -392,6 +423,7 @@ $stmt->close();
                         <a href="atm_device_movement.php?delete_id=<?= (int)$r['id'] ?>" class="btn btn-sm btn-danger" onclick="return confirm('Delete this log entry?')">Delete</a>
                     </td>
                 </tr>
+<<<<<<< HEAD
                 <?php endwhile; else: ?>
                 <tr><td colspan="9" style="text-align:center;">No records found.</td></tr>
                 <?php endif; ?>
@@ -410,6 +442,16 @@ $stmt->close();
 </div>
 
 <script>
+=======
+                <?php endwhile; ?>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// ১. নতুন ফিল্ড দেখানোর লজিক (স্মার্ট সুইচ)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 function updateUI() {
     const m = document.getElementById('m_type').value;
     const d = document.getElementById('d_type').value;
@@ -427,14 +469,26 @@ function updateUI() {
     document.getElementById('placeholder_text').style.display = (m ? 'none' : 'block');
 }
 
+<<<<<<< HEAD
+=======
+// ২. ড্রপডাউন সিলেক্ট করার স্মার্ট ফাংশন (ID অথবা Text দিয়ে)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
 function selectDropdownOption(elementId, idValue, textName) {
     const el = document.getElementById(elementId);
     if (!el) return;
     
+<<<<<<< HEAD
+=======
+    // প্রথমে ID দিয়ে চেষ্টা করা
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     if (idValue && idValue > 0) {
         el.value = idValue;
     } 
     
+<<<<<<< HEAD
+=======
+    // যদি ID দিয়ে না মেলে (পুরানো ডাটা), তবে টেক্সট দিয়ে চেষ্টা করা
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
     if (el.selectedIndex <= 0 && textName) {
         const searchText = textName.trim().toLowerCase();
         for (let i = 0; i < el.options.length; i++) {
@@ -461,6 +515,10 @@ function fetchAtm() {
             document.getElementById('o_zone').value = d.zone_name || '';
             document.getElementById('o_group').value = d.group_no || '';
             
+<<<<<<< HEAD
+=======
+            // ভেন্ডর ড্রপডাউন সিলেক্ট করা (Fix)
+>>>>>>> c6a99dc9be510c188a6889613b6cd33eb079cdb1
             selectDropdownOption('o_atm_v', d.atm_vendor_id, d.atm_vendor);
             selectDropdownOption('o_ups_v', d.ups_vendor_id, d.ups_vendor);
         });
